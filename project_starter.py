@@ -613,7 +613,7 @@ def search_quote_history(search_terms: List[str], limit: int = 5) -> List[Dict]:
 def run_test_scenarios():
     
     print("Initializing Database...")
-    init_database()
+    init_database(db_engine)
     try:
         quote_requests_sample = pd.read_csv("quote_requests_sample.csv")
         quote_requests_sample["request_date"] = pd.to_datetime(
@@ -667,19 +667,21 @@ def run_test_scenarios():
         current_cash = report["cash_balance"]
         current_inventory = report["inventory_value"]
 
-        print(f"Response: {response}")
+        #TODO: Uncomment below lines when multi agent system is implemented
+        # print(f"Response: {response}")
         print(f"Updated Cash: ${current_cash:.2f}")
         print(f"Updated Inventory: ${current_inventory:.2f}")
 
-        results.append(
-            {
-                "request_id": idx + 1,
-                "request_date": request_date,
-                "cash_balance": current_cash,
-                "inventory_value": current_inventory,
-                "response": response,
-            }
-        )
+        #TODO: Uncomment below lines when multi agent system is implemented
+        # results.append(
+        #     {
+        #         "request_id": idx + 1,
+        #         "request_date": request_date,
+        #         "cash_balance": current_cash,
+        #         "inventory_value": current_inventory,
+        #         "response": response,
+        #     }
+        # )
 
         time.sleep(1)
 
