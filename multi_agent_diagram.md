@@ -25,11 +25,16 @@ sequenceDiagram
     Orch->>Quote: Request quote (Apply bulk discounts)
     Quote->>DB: Use: Quote History Tool
     DB-->>Quote: Customer's previous pricing
-    Quote-->>Orch: Final Quote (Discounted)
+    Quote-->>Orch: Final Quote
 
-    Orch->>Customer: Present Quote & Delivery Timeline
+    ### New Optional Step ###
+    opt Manual Review Required
+        Orch->>Customer: Present Quote & Delivery Timeline
+        Customer->>Orch: Approve Quote
+        Customer->>Orch: Submit Payment/Final Order
+    end
+
     
-    Customer->>Orch: Approve Order & Payment
 
     Note over Orch, Full: Step 3: Completion
     Orch->>Full: Execute order fulfillment
