@@ -1,47 +1,43 @@
-
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Customer
-    participant Orch as Orchestrator Agent
-    participant Inv as Inventory Agent
-    participant Quote as Quote Agent
-    participant Full as Fulfillment Agent
-    participant DB as Tools & Database
+graph TD
+    %% Entry Point
+    User[Customer Request] --> Orch
 
-    Customer->>Orch: Inquiry (e.g., "Need 500 reams of A4")
-    
-    Note over Orch, Inv: Step 1: Stock Validation
-    Orch->>Inv: Check availability & reorder status
-    Inv->>DB: Use: Inventory Check Tool
-    DB-->>Inv: Current stock levels
-    alt Low Stock
-        Inv->>DB: Use: Delivery Timeline Tool (Supplier)
-        DB-->>Inv: Estimated restock date
-    end
-    Inv-->>Orch: Stock status & availability
-
-    Note over Orch, Quote: Step 2: Pricing Logic
-    Orch->>Quote: Request quote (Apply bulk discounts)
-    Quote->>DB: Use: Quote History Tool
-    DB-->>Quote: Customer's previous pricing
-    Quote-->>Orch: Final Quote
-
-    ### New Optional Step ###
-    opt Manual Review Required
-        Orch->>Customer: Present Quote & Delivery Timeline
-        Customer->>Orch: Approve Quote
-        Customer->>Orch: Submit Payment/Final Order
+    subgraph MAS [Multi-Agent System]
+        Orch[Orchestrator Agent]
+        Inv[Inventory Agent]
+        Quote[Quote Agent]
+        Full[Fulfillment Agent]
     end
 
-    
+    %% Orchestration Flow
+    Orch -->|1. Validate Stock| Inv
+    Inv -->|Stock Data| Orch
+    Orch -->|2. Request Pricing| Quote
+    Quote -->|Price/Discount| Orch
+    Orch -->|3. Execute Order| Full
+    Full -->|Confirmation| Orch
 
-    Note over Orch, Full: Step 3: Completion
-    Orch->>Full: Execute order fulfillment
-    Full->>DB: Use: Delivery Timeline Tool
-    Full->>DB: Use: Order Fulfillment Tool (Update DB)
-    DB-->>Full: Success / Transaction ID
-    Full-->>Orch: Order Confirmed
+    %% Tools Mapping
+    subgraph Toolset [Tools and Helper Functions]
+        T1[check_inventory_tool]
+        T2[check_reorder_status_tool]
+        T3[get_quote_history_tool]
+        T4[create_order_fulfillment_tool]
+        T5[check_delivery_timeline_tool]
+    end
 
-    Orch->>Customer: Send Confirmation & Receipt
-```
+    %% Agent-Tool Interactions
+    Inv --- T1
+    Inv --- T2
+    Quote --- T3
+    Full --- T4
+    Full --- T5
+    Inv --- T5
+
+    %% Database
+    T1 & T2 & T3 & T4 --- DB[(Database)]
+
+    %% Final Output
+    Orch --> Result[Final Order Confirmation]
+    ```
