@@ -9,16 +9,22 @@ from smolagents import ToolCallingAgent, OpenAIServerModel
 
 
 class InventoryStatus(BaseModel):
+    available_items: Dict[str, int]
+    missing_items: list
+
+
+class InventoryManagerStatus(BaseModel):
     items: Dict[str, int]
+    missing_items: list = []
     low_stock: list
     reorder_required: bool
-    restock_date: str = None  # type: ignore
 
 
 class QuoteDetails(BaseModel):
-    total_price: float
-    itemized_breakdown: list
-    discount_applied: str
+    quoted_items: Dict[str, Dict] = {}
+    unavailable_items: list = []
+    total_price: float = 0.0
+    bulk_discount: str = "0%"
 
 
 class CustomerDecision(BaseModel):
@@ -37,13 +43,15 @@ class OrchestratorAgent(ToolCallingAgent):
     def __init__(
         self,
         model: OpenAIServerModel,
-        inventory_agent,
+        inventory_checker_agent,
+        inventory_manager_agent,
         quote_agent,
         customer_agent,
         fulfillment_agent,
         verbosity_level: int = 0
     ):
-        self.inventory_agent = inventory_agent
+        self.inventory_checker_agent = inventory_checker_agent
+        self.inventory_manager_agent = inventory_manager_agent
         self.quote_agent = quote_agent
         self.customer_agent = customer_agent
         self.fulfillment_agent = fulfillment_agent
@@ -54,25 +62,28 @@ class OrchestratorAgent(ToolCallingAgent):
             tools=[],
             verbosity_level=verbosity_level,
             description="""Master orchestrator agent that manages the entire order processing workflow.
-            You coordinate between InventoryAgent, QuoteAgent, CustomerAgent, and FulfillmentAgent to handle customer requests.
+            You coordinate between InventoryCheckerAgent, InventoryManagerAgent, QuoteAgent, CustomerAgent, and FulfillmentAgent to handle customer requests.
             
             Your workflow:
-            1. INVENTORY CHECK: Use InventoryAgent to:
-               - Check availability of requested items
-               - Identify any low stock situations
-               - Get supplier delivery timelines if restocking is needed
+            1. INVENTORY CHECKER: Use InventoryCheckerAgent to:
+               - Check current stock levels for requested items
+               
+            2. INVENTORY MANAGER: Use InventoryManagerAgent to:
+               - Analyze inventory status and identify low stock situations
+               - Check reorder requirements
+               - Estimate supplier delivery timelines if restocking is needed
             
-            2. QUOTE GENERATION: Use QuoteAgent to:
+            3. QUOTE GENERATION: Use QuoteAgent to:
                - Generate pricing quotes based on inventory availability
                - Apply appropriate bulk discounts
                - Provide itemized breakdown
             
-            3. CUSTOMER APPROVAL: Present quote and delivery timeline to customer
+            4. CUSTOMER APPROVAL: Present quote and delivery timeline to customer
                - Show final price
                - Show estimated delivery date
                - Request customer approval and payment confirmation
             
-            4. ORDER FULFILLMENT: Use FulfillmentAgent to:
+            5. ORDER FULFILLMENT: Use FulfillmentAgent to:
                - Execute order after customer approval
                - Record sales transaction
                - Generate order confirmation
@@ -85,7 +96,7 @@ class OrchestratorAgent(ToolCallingAgent):
             - Make decisions based on business logic
             - Provide final order confirmation and receipt
             
-            Always follow the workflow in order: Check Inventory → Generate Quote → Get Approval → Fulfill Order.""",
+            Always follow the workflow in order: Check Inventory → Analyze Stock → Generate Quote → Get Approval → Fulfill Order.""",
         )
     
     def _extract_json_from_response(self, response: str) -> Dict:
@@ -109,14 +120,24 @@ class OrchestratorAgent(ToolCallingAgent):
         return {}
     
     def _parse_inventory_response(self, response: str) -> InventoryStatus:
-        """Parse inventory agent response into InventoryStatus object."""
+        """Parse inventory checker agent response into InventoryStatus object."""
         try:
             data = self._extract_json_from_response(response)
             if data:
                 return InventoryStatus(**data)
         except Exception as e:
             print(f"Warning: Could not parse inventory response: {e}")
-        return InventoryStatus(items={}, low_stock=[], reorder_required=False, restock_date="")  # type: ignore
+        return InventoryStatus(available_items={}, missing_items=[])
+    
+    def _parse_inventory_manager_response(self, response: str) -> InventoryManagerStatus:
+        """Parse inventory manager agent response into InventoryManagerStatus object."""
+        try:
+            data = self._extract_json_from_response(response)
+            if data:
+                return InventoryManagerStatus(**data)
+        except Exception as e:
+            print(f"Warning: Could not parse inventory manager response: {e}")
+        return InventoryManagerStatus(items={}, missing_items=[], low_stock=[], reorder_required=False, recommendation="")
     
     def _parse_quote_response(self, response: str) -> QuoteDetails:
         """Parse quote agent response into QuoteDetails object."""
@@ -126,7 +147,7 @@ class OrchestratorAgent(ToolCallingAgent):
                 return QuoteDetails(**data)
         except Exception as e:
             print(f"Warning: Could not parse quote response: {e}")
-        return QuoteDetails(total_price=0.0, itemized_breakdown=[], discount_applied="0%")
+        return QuoteDetails(total_price=0.0, quoted_items={}, unavailable_items=[], bulk_discount="0%")
     
     def _parse_customer_decision(self, response: str) -> CustomerDecision:
         """Parse customer agent response into CustomerDecision object."""
@@ -180,16 +201,24 @@ class OrchestratorAgent(ToolCallingAgent):
         fulfillment_details = ""
         
         try:
-            # STEP 1: Inventory Check
-            print("\n[STEP 1] Checking inventory and stock status...")
-            inventory_response = self.inventory_agent.run(customer_request)
-            print(f"\n[Inventory Agent Response]:\n{inventory_response}\n")
-            inventory_data = self._parse_inventory_response(inventory_response)
+            # STEP 1A: Inventory Check (InventoryCheckerAgent)
+            print("\n[STEP 1A] Checking current inventory levels...")
+            checker_response = self.inventory_checker_agent.run(customer_request)
+            print(f"\n[Inventory Checker Agent Response]:\n{checker_response}\n")
+            inventory_data = self._parse_inventory_response(checker_response)
             print(f"[Parsed Inventory Data]: {inventory_data}\n")
+            
+            # STEP 1B: Inventory Management (InventoryManagerAgent)
+            print("[STEP 1B] Analyzing inventory status and reorder requirements...")
+            manager_context = f"Customer request: {customer_request}\nCurrent Inventory: {inventory_data.dict()}"
+            manager_response = self.inventory_manager_agent.run(manager_context)
+            print(f"\n[Inventory Manager Agent Response]:\n{manager_response}\n")
+            inventory_manager_data = self._parse_inventory_manager_response(manager_response)
+            print(f"[Parsed Inventory Manager Data]: {inventory_manager_data}\n")
                         
             # STEP 2: Generate Quote
             print("[STEP 2] Generating pricing quote...")
-            quote_context = f"Customer request: {customer_request}\nInventory Status: {inventory_data.dict()}"
+            quote_context = f"Customer request: {customer_request}\nInventory Status: {inventory_manager_data.dict()}"
             quote_response = self.quote_agent.run(quote_context)
             print(f"\n[Quote Agent Response]:\n{quote_response}\n")
             quote_data = self._parse_quote_response(quote_response)
@@ -197,7 +226,7 @@ class OrchestratorAgent(ToolCallingAgent):
             
             # STEP 3: Customer Decision
             print("[STEP 3] Customer Review and Decision...")
-            customer_context = f"Review this quote and decide:\nTotal Price: ${quote_data.total_price}\nItems: {quote_data.itemized_breakdown}\nDiscount: {quote_data.discount_applied}"
+            customer_context = f"Review this quote and decide:\nTotal Price: ${quote_data.total_price}\nItems: {quote_data.quoted_items}\nDiscount: {quote_data.bulk_discount}"
             customer_response = self.customer_agent.run(customer_context)
             print(f"\n[Customer Agent Response]:\n{customer_response}\n")
             customer_decision = self._parse_customer_decision(customer_response)
@@ -209,9 +238,9 @@ class OrchestratorAgent(ToolCallingAgent):
                 fulfillment_context = f"""Customer approved the order.
                 
 Request: {customer_request}
-Quote Details: Total ${quote_data.total_price}, Items: {json.dumps(quote_data.itemized_breakdown)}
+Quote Details: Total ${quote_data.total_price}, Items: {json.dumps(quote_data.quoted_items)}
 Request Date: {request_date}
-Delivery Date: {inventory_data.restock_date or request_date}"""
+Delivery Date: {request_date}"""
                 fulfillment_response = self.fulfillment_agent.run(fulfillment_context)
             else:
                 print("[STEP 4] Order Declined - No fulfillment")
@@ -236,16 +265,23 @@ Delivery Date: {inventory_data.restock_date or request_date}"""
                             FINAL SUMMARY
 ================================================================================
 
-STEP 1 - INVENTORY STATUS
+STEP 1A - INVENTORY CHECK
   Available Items: {inventory_data.items}
-  Low Stock Items: {inventory_data.low_stock}
-  Reorder Required: {inventory_data.reorder_required}
-  Restock Date: {inventory_data.restock_date}
+  Missing Items: {inventory_data.missing_items}
+
+STEP 1B - INVENTORY MANAGEMENT
+  Items: {inventory_manager_data.items}
+  Missing Items: {inventory_manager_data.missing_items}
+  Low Stock Items: {inventory_manager_data.low_stock}
+  Reorder Required: {inventory_manager_data.reorder_required}
+  Recommendation: {inventory_manager_data.recommendation}
 
 STEP 2 - PRICING QUOTE
   Total Price: ${quote_data.total_price:.2f}
-  Discount Applied: {quote_data.discount_applied}
-  Itemized Breakdown: {json.dumps(quote_data.itemized_breakdown, indent=2)}
+  Bulk Discount: {quote_data.bulk_discount}
+  Quoted Items: {json.dumps(quote_data.quoted_items, indent=2)}
+  Unavailable Items: {quote_data.unavailable_items}
+  Recommendation: {quote_data.recommendation}
 
 STEP 3 - CUSTOMER DECISION
   Decision: {customer_decision.decision}

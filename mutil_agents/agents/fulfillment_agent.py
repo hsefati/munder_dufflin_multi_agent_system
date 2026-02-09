@@ -1,7 +1,7 @@
 """Fulfillment Agent - executes orders and manages shipment logistics."""
 
 from smolagents import ToolCallingAgent, OpenAIServerModel
-from tools.fulfillment_tools import create_order_fulfillment_tool, check_delivery_timeline_tool
+from mutil_agents.tools.fulfillment_tools import create_order_fulfillment_tool, check_delivery_timeline_tool
 
 
 class FulfillmentAgent(ToolCallingAgent):

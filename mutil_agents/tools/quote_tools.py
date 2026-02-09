@@ -4,9 +4,8 @@ import pandas as pd
 from datetime import datetime
 from typing import Dict, List
 from sqlalchemy import create_engine
-from sqlalchemy.sql import text
 from smolagents import tool
-from utils import search_quote_history
+from mutil_agents.tools.utils import search_quote_history
 
 # Database setup
 db_engine = create_engine("sqlite:///munder_difflin.db")
@@ -85,3 +84,9 @@ def generate_quote_tool(items: str, quantities: str) -> Dict:
         "total_amount": total_price,
         "quote_date": datetime.now().isoformat(),
     }
+
+
+if __name__ == "__main__":
+    # Example usage
+    # print(get_quote_history_tool("stapler, printer paper"))
+    print(generate_quote_tool("A4 paper", "100"))
