@@ -1,12 +1,16 @@
 """Order fulfillment tools for the fulfillment agent."""
 
 import pandas as pd
+import logging
 from datetime import datetime
 from typing import Dict, Union
 from sqlalchemy import create_engine
 from smolagents import tool
 from mutil_agents.tools.database_setup import create_transaction
 from mutil_agents.tools.utils import get_stock_level, get_supplier_delivery_date
+
+# Configure logging for this module
+logger = logging.getLogger(__name__)
 
 # Database setup
 db_engine = create_engine("sqlite:///munder_difflin.db")
@@ -48,14 +52,17 @@ def create_order_fulfillment_tool(
             - 'status': 'success' or 'error'
             - 'message': Confirmation or error message
     """
+    logger.info(f"Processing order fulfillment for item={item_name}, quantity={quantity}, price_per_unit={price_per_unit}")
     try:
         total_price = quantity * price_per_unit
 
         # Verify item exists and sufficient stock is available
+        logger.debug(f"Checking stock level for {item_name} as of {transaction_date}")
         stock_info = get_stock_level(item_name, transaction_date)
         current_stock = stock_info["current_stock"].iloc[0]
 
         if current_stock < quantity:
+            logger.warning(f"Insufficient stock for {item_name}: available={int(current_stock)}, requested={quantity}")
             return {
                 "status": "error",
                 "message": f"Insufficient stock. Available: {int(current_stock)}, Requested: {quantity}",
@@ -63,6 +70,7 @@ def create_order_fulfillment_tool(
             }
 
         # Create the sales transaction
+        logger.debug(f"Creating sales transaction for {item_name}")
         transaction_id = _create_transaction_wrapper(
             item_name=item_name,
             transaction_type="sales",
@@ -71,6 +79,7 @@ def create_order_fulfillment_tool(
             date=transaction_date,
         )
 
+        logger.info(f"Order fulfillment completed successfully: transaction_id={transaction_id}, item={item_name}, qty={quantity}")
         return {
             "transaction_id": str(transaction_id),
             "item_name": item_name,
@@ -80,6 +89,7 @@ def create_order_fulfillment_tool(
             "message": f"Order fulfillment completed. Transaction ID: {transaction_id}",
         }
     except Exception as e:
+        logger.error(f"Fulfillment failed for item={item_name}: {str(e)}", exc_info=True)
         return {
             "status": "error",
             "message": f"Fulfillment failed: {str(e)}",
@@ -99,4 +109,7 @@ def check_delivery_timeline_tool(order_date: str, quantity: int) -> str:
     Returns:
         str: Estimated delivery date in ISO format (YYYY-MM-DD).
     """
-    return get_supplier_delivery_date(input_date_str=order_date, quantity=quantity)
+    logger.info(f"Checking delivery timeline for order_date={order_date}, quantity={quantity}")
+    delivery_date = get_supplier_delivery_date(input_date_str=order_date, quantity=quantity)
+    logger.debug(f"Estimated delivery date: {delivery_date}")
+    return delivery_date

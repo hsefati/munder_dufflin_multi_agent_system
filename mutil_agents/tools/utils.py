@@ -1,9 +1,12 @@
 import pandas as pd
+import logging
 from sqlalchemy.sql import text
 from datetime import datetime, timedelta
-from typing import Dict, List, Union, Optional
+from typing import Dict, List, Union
 from sqlalchemy import create_engine
 
+# Configure logging for this module
+logger = logging.getLogger(__name__)
 
 # Create an SQLite database
 db_engine = create_engine("sqlite:///munder_difflin.db")
@@ -24,6 +27,8 @@ def get_all_inventory(as_of_date: str) -> Dict[str, int]:
     Returns:
         Dict[str, int]: A dictionary mapping item names to their current stock levels.
     """
+    logger.debug(f"Retrieving inventory snapshot as of {as_of_date}")
+    
     # SQL query to compute stock levels per item as of the given date
     query = """
         SELECT
@@ -42,6 +47,7 @@ def get_all_inventory(as_of_date: str) -> Dict[str, int]:
 
     # Execute the query with the date parameter
     result = pd.read_sql(query, db_engine, params={"as_of_date": as_of_date})
+    logger.debug(f"Found {len(result)} items with positive stock")
 
     # Convert the result into a dictionary {item_name: stock}
     return dict(zip(result["item_name"], result["stock"]))
@@ -61,6 +67,8 @@ def get_stock_level(item_name: str, as_of_date: Union[str, datetime]) -> pd.Data
     Returns:
         pd.DataFrame: A single-row DataFrame with columns 'item_name' and 'current_stock'.
     """
+    logger.debug(f"Retrieving stock level for item={item_name} as of {as_of_date}")
+    
     # Convert date to ISO string format if it's a datetime object
     if isinstance(as_of_date, datetime):
         as_of_date = as_of_date.isoformat()
@@ -80,11 +88,13 @@ def get_stock_level(item_name: str, as_of_date: Union[str, datetime]) -> pd.Data
     """
 
     # Execute query and return result as a DataFrame
-    return pd.read_sql(
+    result = pd.read_sql(
         stock_query,
         db_engine,
         params={"item_name": item_name, "as_of_date": as_of_date},
     )
+    logger.debug(f"Stock level for {item_name}: {result['current_stock'].iloc[0] if not result.empty else 0}")
+    return result
 
 
 def get_supplier_delivery_date(input_date_str: str, quantity: int) -> str:
@@ -104,19 +114,14 @@ def get_supplier_delivery_date(input_date_str: str, quantity: int) -> str:
     Returns:
         str: Estimated delivery date in ISO format (YYYY-MM-DD).
     """
-    # Debug log (comment out in production if needed)
-    print(
-        f"FUNC (get_supplier_delivery_date): Calculating for qty {quantity} from date string '{input_date_str}'"
-    )
+    logger.debug(f"Calculating supplier delivery date for qty={quantity} from date={input_date_str}")
 
     # Attempt to parse the input date
     try:
         input_date_dt = datetime.fromisoformat(input_date_str.split("T")[0])
     except (ValueError, TypeError):
         # Fallback to current date on format error
-        print(
-            f"WARN (get_supplier_delivery_date): Invalid date format '{input_date_str}', using today as base."
-        )
+        logger.warning(f"Invalid date format '{input_date_str}', using today as base")
         input_date_dt = datetime.now()
 
     # Determine delivery delay based on quantity
@@ -128,6 +133,8 @@ def get_supplier_delivery_date(input_date_str: str, quantity: int) -> str:
         days = 4
     else:
         days = 7
+
+    logger.debug(f"Delivery lead time: {days} days for quantity {quantity}")
 
     # Add delivery days to the starting date
     delivery_date_dt = input_date_dt + timedelta(days=days)
@@ -149,6 +156,7 @@ def get_cash_balance(as_of_date: Union[str, datetime]) -> float:
     Returns:
         float: Net cash balance as of the given date. Returns 0.0 if no transactions exist or an error occurs.
     """
+    logger.debug(f"Calculating cash balance as of {as_of_date}")
     try:
         # Convert date to ISO format if it's a datetime object
         if isinstance(as_of_date, datetime):
@@ -169,12 +177,15 @@ def get_cash_balance(as_of_date: Union[str, datetime]) -> float:
             total_purchases = transactions.loc[
                 transactions["transaction_type"] == "stock_orders", "price"
             ].sum()
-            return float(total_sales - total_purchases)
+            balance = float(total_sales - total_purchases)
+            logger.debug(f"Cash balance: ${balance:.2f} (sales=${total_sales:.2f}, purchases=${total_purchases:.2f})")
+            return balance
 
+        logger.debug("No transactions found, returning 0.0")
         return 0.0
 
     except Exception as e:
-        print(f"Error getting cash balance: {e}")
+        logger.error(f"Error getting cash balance: {e}", exc_info=True)
         return 0.0
 
 
@@ -201,14 +212,18 @@ def generate_financial_report(as_of_date: Union[str, datetime]) -> Dict:
             - 'inventory_summary': List of items with stock and valuation details
             - 'top_selling_products': List of top 5 products by revenue
     """
+    logger.info(f"Generating financial report as of {as_of_date}")
+    
     # Normalize date input
     if isinstance(as_of_date, datetime):
         as_of_date = as_of_date.isoformat()
 
+    logger.debug("Retrieving cash balance")
     # Get current cash balance
     cash = get_cash_balance(as_of_date)
 
     # Get current inventory snapshot
+    logger.debug("Retrieving inventory snapshot")
     inventory_df = pd.read_sql("SELECT * FROM inventory", db_engine)
     inventory_value = 0.0
     inventory_summary = []
@@ -229,6 +244,8 @@ def generate_financial_report(as_of_date: Union[str, datetime]) -> Dict:
             }
         )
 
+    logger.debug(f"Inventory value: ${inventory_value:.2f}, items: {len(inventory_summary)}")
+
     # Identify top-selling products by revenue
     top_sales_query = """
         SELECT item_name, SUM(units) as total_units, SUM(price) as total_revenue
@@ -240,12 +257,17 @@ def generate_financial_report(as_of_date: Union[str, datetime]) -> Dict:
     """
     top_sales = pd.read_sql(top_sales_query, db_engine, params={"date": as_of_date})
     top_selling_products = top_sales.to_dict(orient="records")
+    
+    logger.debug(f"Top selling products: {len(top_selling_products)} items")
+    
+    total_assets = cash + inventory_value
+    logger.info(f"Financial report completed: total_assets=${total_assets:.2f}, cash=${cash:.2f}, inventory=${inventory_value:.2f}")
 
     return {
         "as_of_date": as_of_date,
         "cash_balance": cash,
         "inventory_value": inventory_value,
-        "total_assets": cash + inventory_value,
+        "total_assets": total_assets,
         "inventory_summary": inventory_summary,
         "top_selling_products": top_selling_products,
     }
@@ -273,6 +295,8 @@ def search_quote_history(search_terms: List[str], limit: int = 5) -> List[Dict]:
             - event_type
             - order_date
     """
+    logger.debug(f"Searching quote history with terms: {search_terms}, limit={limit}")
+    
     conditions = []
     params = {}
 
@@ -305,7 +329,12 @@ def search_quote_history(search_terms: List[str], limit: int = 5) -> List[Dict]:
         LIMIT {limit}
     """
 
+    logger.debug(f"Executing quote history query with {len(params)} parameters")
+    
     # Execute parameterized query
     with db_engine.connect() as conn:
         result = conn.execute(text(query), params)
-        return [dict(row._mapping) for row in result]
+        records = [dict(row._mapping) for row in result]
+    
+    logger.info(f"Found {len(records)} matching quotes")
+    return records

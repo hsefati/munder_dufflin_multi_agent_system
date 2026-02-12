@@ -11,9 +11,13 @@ import pandas as pd
 import numpy as np
 import json
 import ast
+import logging
 from datetime import datetime
 from typing import Union
 from sqlalchemy import Engine
+
+# Configure logging for this module
+logger = logging.getLogger(__name__)
 
 
 def load_paper_supplies() -> list:
@@ -23,8 +27,15 @@ def load_paper_supplies() -> list:
     Returns:
         list: A list of dictionaries containing paper supply information
     """
-    with open("paper_supplies.json", "r") as f:
-        return json.load(f)
+    logger.info("Loading paper supplies from JSON configuration file")
+    try:
+        with open("paper_supplies.json", "r") as f:
+            supplies = json.load(f)
+        logger.info(f"Successfully loaded {len(supplies)} paper supply items")
+        return supplies
+    except Exception as e:
+        logger.error(f"Failed to load paper supplies: {e}")
+        raise
 
 
 def generate_sample_inventory(
@@ -54,11 +65,14 @@ def generate_sample_inventory(
                       - current_stock
                       - min_stock_level
     """
+    logger.debug(f"Generating sample inventory with coverage={coverage}, seed={seed}")
+    
     # Ensure reproducible random output
     np.random.seed(seed)
 
     # Calculate number of items to include based on coverage
     num_items = int(len(paper_supplies) * coverage)
+    logger.debug(f"Selecting {num_items} items from {len(paper_supplies)} available items")
 
     # Randomly select item indices without replacement
     selected_indices = np.random.choice(
@@ -83,6 +97,8 @@ def generate_sample_inventory(
             }
         )
 
+    logger.info(f"Generated sample inventory with {len(inventory)} items")
+    
     # Return inventory as a pandas DataFrame
     return pd.DataFrame(inventory)
 
@@ -109,13 +125,16 @@ def init_database(db_engine: Engine, seed: int = 137) -> Engine:
     Raises:
         Exception: If an error occurs during setup, the exception is printed and raised.
     """
+    logger.info("Starting database initialization")
     try:
         # Load paper supplies
+        logger.debug("Loading paper supplies for inventory")
         paper_supplies = load_paper_supplies()
         
         # ----------------------------
         # 1. Create an empty 'transactions' table schema
         # ----------------------------
+        logger.debug("Creating transactions table schema")
         transactions_schema = pd.DataFrame(
             {
                 "id": [],
@@ -129,28 +148,34 @@ def init_database(db_engine: Engine, seed: int = 137) -> Engine:
         transactions_schema.to_sql(
             "transactions", db_engine, if_exists="replace", index=False
         )
+        logger.debug("Transactions table created")
 
         # Set a consistent starting date
         initial_date = datetime(2025, 1, 1).isoformat()
+        logger.debug(f"Set initial date to {initial_date}")
 
         # ----------------------------
         # 2. Load and initialize 'quote_requests' table
         # ----------------------------
+        logger.debug("Loading quote_requests from CSV")
         quote_requests_df = pd.read_csv("quote_requests.csv")
         quote_requests_df["id"] = range(1, len(quote_requests_df) + 1)
         quote_requests_df.to_sql(
             "quote_requests", db_engine, if_exists="replace", index=False
         )
+        logger.info(f"Loaded {len(quote_requests_df)} quote requests")
 
         # ----------------------------
         # 3. Load and transform 'quotes' table
         # ----------------------------
+        logger.debug("Loading quotes from CSV")
         quotes_df = pd.read_csv("quotes.csv")
         quotes_df["request_id"] = range(1, len(quotes_df) + 1)
         quotes_df["order_date"] = initial_date
 
         # Unpack metadata fields (job_type, order_size, event_type) if present
         if "request_metadata" in quotes_df.columns:
+            logger.debug("Extracting metadata from quotes")
             quotes_df["request_metadata"] = quotes_df["request_metadata"].apply(
                 lambda x: ast.literal_eval(x) if isinstance(x, str) else x
             )
@@ -177,16 +202,19 @@ def init_database(db_engine: Engine, seed: int = 137) -> Engine:
             ]
         ]
         quotes_df.to_sql("quotes", db_engine, if_exists="replace", index=False)
+        logger.info(f"Loaded {len(quotes_df)} quotes")
 
         # ----------------------------
         # 4. Generate inventory and seed stock
         # ----------------------------
+        logger.debug("Generating sample inventory")
         inventory_df = generate_sample_inventory(paper_supplies, seed=seed)
 
         # Seed initial transactions
         initial_transactions = []
 
         # Add a starting cash balance via a dummy sales transaction
+        logger.debug("Creating initial cash balance transaction")
         initial_transactions.append(
             {
                 "item_name": None,
@@ -198,6 +226,7 @@ def init_database(db_engine: Engine, seed: int = 137) -> Engine:
         )
 
         # Add one stock order transaction per inventory item
+        logger.debug(f"Creating {len(inventory_df)} initial stock order transactions")
         for _, item in inventory_df.iterrows():
             initial_transactions.append(
                 {
@@ -210,17 +239,20 @@ def init_database(db_engine: Engine, seed: int = 137) -> Engine:
             )
 
         # Commit transactions to database
+        logger.debug(f"Inserting {len(initial_transactions)} transactions into database")
         pd.DataFrame(initial_transactions).to_sql(
             "transactions", db_engine, if_exists="append", index=False
         )
 
         # Save the inventory reference table
+        logger.debug("Saving inventory reference table")
         inventory_df.to_sql("inventory", db_engine, if_exists="replace", index=False)
-
+        
+        logger.info("Database initialization completed successfully")
         return db_engine
 
     except Exception as e:
-        print(f"Error initializing database: {e}")
+        logger.error(f"Error initializing database: {e}", exc_info=True)
         raise
 
 
@@ -251,12 +283,14 @@ def create_transaction(
         ValueError: If `transaction_type` is not 'stock_orders' or 'sales'.
         Exception: For other database or execution errors.
     """
+    logger.debug(f"Creating transaction: item={item_name}, type={transaction_type}, qty={quantity}, price={price}, date={date}")
     try:
         # Convert datetime to ISO string if necessary
         date_str = date.isoformat() if isinstance(date, datetime) else date
 
         # Validate transaction type
         if transaction_type not in {"stock_orders", "sales"}:
+            logger.error(f"Invalid transaction type: {transaction_type}")
             raise ValueError("Transaction type must be 'stock_orders' or 'sales'")
 
         # Prepare transaction record as a single-row DataFrame
@@ -277,8 +311,10 @@ def create_transaction(
 
         # Fetch and return the ID of the inserted row
         result = pd.read_sql("SELECT last_insert_rowid() as id", db_engine)
-        return int(result.iloc[0]["id"])
+        transaction_id = int(result.iloc[0]["id"])
+        logger.info(f"Transaction created successfully: ID={transaction_id}")
+        return transaction_id
 
     except Exception as e:
-        print(f"Error creating transaction: {e}")
+        logger.error(f"Error creating transaction: {e}", exc_info=True)
         raise

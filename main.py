@@ -6,13 +6,17 @@ from sqlalchemy import create_engine
 from smolagents import (
     OpenAIServerModel,
 )
+import logging
 from mutil_agents.tools.database_setup import init_database
+
 # from mutil_agents.agents.inventory_agent import InventoryCheckerAgent
 # from mutil_agents.agents.inventory_management import InventoryManagerAgent
 from mutil_agents.agents.inventory_management_v2 import InventoryManagerAgent
+
 # from mutil_agents.agents.quote_agent import QuoteAgent
 from mutil_agents.agents.quote_agent_v2 import QuoteAgent
 from mutil_agents.agents.customer_agent import CustomerAgent
+
 # from mutil_agents.agents.fulfillment_agent import FulfillmentAgent
 from mutil_agents.agents.fulfillment_agent_v2 import FulfillmentAgent
 from mutil_agents.agents.orchestrator_agent import OrchestratorAgent
@@ -21,6 +25,20 @@ from mutil_agents.tools.utils import generate_financial_report
 dotenv.load_dotenv()
 OPENAI_API_KEY = os.getenv("UDACITY_OPENAI_API_KEY")
 SMOLAGENT_VERBOSITY = int(os.getenv("SMOLAGENT_VERBOSITY", "0"))
+LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO")  # Default to INFO level
+
+if LOGGING_LEVEL.upper() == "DEBUG":
+    logging_level = logging.DEBUG
+elif LOGGING_LEVEL.upper() == "INFO":
+    logging_level = logging.INFO
+elif LOGGING_LEVEL.upper() == "WARNING":
+    logging_level = logging.WARNING
+elif LOGGING_LEVEL.upper() == "ERROR":
+    logging_level = logging.ERROR
+elif LOGGING_LEVEL.upper() == "CRITICAL":
+    logging_level = logging.CRITICAL
+else:
+    logging_level = logging.INFO  # Default to INFO if invalid level provided
 
 model = OpenAIServerModel(
     model_id="gpt-4o-mini",
@@ -29,8 +47,19 @@ model = OpenAIServerModel(
 )
 
 
+# Configure logging at the module level
+logging.basicConfig(
+    level=logging_level,  # Set to DEBUG, INFO, WARNING, ERROR, or CRITICAL
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("munder_difflin.log"),  # Log to file
+        logging.StreamHandler(),  # Also log to console
+    ],
+)
+
 # Create an SQLite database
 db_engine = create_engine("sqlite:///munder_difflin.db")
+
 
 def run_test_scenarios():
 
@@ -68,12 +97,19 @@ def run_test_scenarios():
 
     print("[SETUP] Creating agents...")
     # inventory_checker_agent = InventoryCheckerAgent(model, verbosity_level=SMOLAGENT_VERBOSITY)
-    inventory_manager_agent = InventoryManagerAgent(model, verbosity_level=SMOLAGENT_VERBOSITY)
+    inventory_manager_agent = InventoryManagerAgent(
+        model, verbosity_level=SMOLAGENT_VERBOSITY
+    )
     quote_agent = QuoteAgent(model, verbosity_level=SMOLAGENT_VERBOSITY)
     customer_agent = CustomerAgent(model, verbosity_level=SMOLAGENT_VERBOSITY)
     fulfillment_agent = FulfillmentAgent(model, verbosity_level=SMOLAGENT_VERBOSITY)
     orchestrator = OrchestratorAgent(
-        model, inventory_manager_agent, quote_agent, customer_agent, fulfillment_agent, verbosity_level=SMOLAGENT_VERBOSITY
+        model,
+        inventory_manager_agent,
+        quote_agent,
+        customer_agent,
+        fulfillment_agent,
+        verbosity_level=SMOLAGENT_VERBOSITY,
     )
     print("All agents created successfully\n")
 
@@ -96,8 +132,8 @@ def run_test_scenarios():
         # Process request
         request_with_date = f"{row['request']} (Date of request: {request_date})"
 
-        response, fulfilled, fulfillment_details = orchestrator.process_customer_request(
-            request_with_date, request_date
+        response, fulfilled, fulfillment_details = (
+            orchestrator.process_customer_request(request_with_date, request_date)
         )
 
         if fulfilled:
@@ -131,7 +167,7 @@ def run_test_scenarios():
         count += 1
         if count % 8 == 0:
             break
-        # break
+        break
 
     # Final report
     final_date = quote_requests_sample["request_date"].max().strftime("%Y-%m-%d")
