@@ -84,48 +84,16 @@ class QuoteAgent(CodeAgent):
             model=model,
             tools=[get_quote_history_tool, generate_quote_tool, final_answer],
             verbosity_level=verbosity_level,
-            description="""
-You are a specialized Pricing Specialist Agent. Follow this process:
-
-Your input will be provided in your 'additional_args' via the following variables:
-1. 'available_items': Dictionary of {item_name: current_stock}
-2. 'missing_items': List of items with 0 stock
-3. 'low_stock': List of items nearing exhaustion
-4. 'delivery_timelines': Dictionary of {item_name: shipping_details} (includes estimated_delivery)
-
-Follow this process:
-
-STEP 1: Analyze Requests and Validate Availability
-- Cross-reference the user's requested items against 'available_items'.
-- If a requested quantity exceeds 'available_items[item]', cap the quote at the available quantity.
-- Identify which requested items are in 'missing_items' or are entirely absent from 'available_items'. 
-- Store these in a list called 'unavailable_items'.
-
-STEP 2: Retrieve Pricing and Generate Quotes
-- For every item identified as available in Step 1:
-    - Call 'get_quote_history_tool' to analyze previous pricing trends.
-    - Call 'generate_quote_tool' using the exact item name string.
-    - If an item is in 'low_stock', extract the 'estimated_delivery' from the 'delivery_timelines' variable.
-
-STEP 3: Data Transformation and Calculations
-- Structure all successful quotes into a dictionary called 'quoted_items' using the format:
-  {"Item Name": {"quantity": X, "unit_price": Y, "discount": "Z%", "total": W}}
-- Sum all "total" values to calculate 'total_price'.
-- Identify the highest single discount percentage among all quoted items and set this as 'bulk_discount'.
-
-STEP 4: Generate Final Report
-- Call the 'final_answer' tool as your last action with the following structured data:
-    - quoted_items: The dictionary of processed quotes (empty {} if none).
-    - total_price: The sum of all quoted items (0.0 if none).
-    - unavailable_items: List of items that could not be quoted.
-    - bulk_discount: The highest discount value found (as a string or float).
-    - reorder_alerts: A list of any quoted items that were also found in the 'low_stock' list.
-
-IMPORTANT: 
-- No Hallucinations: Only use values returned by tools.
-- Strict Matching: Use exact keys from available_items.
-- Final Action: You MUST call final_answer with all data as your final step.
-""",
+            description=""""
+    You are a Strategic Sales Agent. Your goal is to generate quotes that maximize value and encourage bulk buying.
+    
+    STRATEGY:
+    1. Before quoting, check history to understand past pricing for these items.
+    2. Note the Discount Tiers: 5% at >100 units, 10% at >500 units, and 15% at >1000 units.
+    3. If a user requests a quantity just below a tier (e.g., 95 units), generate the requested quote AND a second 'comparison' quote at the tier threshold (e.g., 101 units) to show them the savings.
+    4. Always highlight the total discount applied in your final response to make the deal feel attractive.
+    5. Use the 'final_answer' tool to return a structured quote.
+    """,
         )
 
 
@@ -162,21 +130,39 @@ if __name__ == "__main__":
 
     inventory_manager_data = {
         "available_items": {},
-        "missing_items": ["A4 glossy paper", "heavy cardstock (white)", "colored paper (assorted colors)"],
+        "missing_items": [
+            "A4 glossy paper",
+            "heavy cardstock (white)",
+            "colored paper (assorted colors)",
+        ],
         "low_stock": [],
         "reorder_required": False,
         "delivery_timelines": {},
     }
+    inventory_data = {
+        "available_items": {
+            "A4 glossy paper": 0,
+            "heavy cardstock (white)": 0,
+            "colored paper (assorted colors)": 0,
+        },
+        "missing_items": [
+            "A4 glossy paper",
+            "heavy cardstock (white)",
+            "colored paper (assorted colors)",
+        ],
+        "low_stock": [],
+        "reorder_required": True,
+        "delivery_timelines": {
+            "A4 glossy paper": "2025-04-05",
+            "heavy cardstock (white)": "2025-04-02",
+            "colored paper (assorted colors)": "2025-04-02",
+        },
+    }
 
     result = orchestrator.run(
-        "Please generate a pricing quote based on the customer request and inventory status.",
-        additional_args={
-            "available_items": inventory_manager_data["available_items"],
-            "missing_items": inventory_manager_data["missing_items"],
-            "low_stock": inventory_manager_data["low_stock"],
-            "reorder_required": inventory_manager_data["reorder_required"],
-            "delivery_timelines": inventory_manager_data["delivery_timelines"],
-        },
+        "Based on the inventory_data, generate a quote for the missing_items. "
+        "Assume we need to order 200 units of each to meet minimum stock levels.",
+        additional_args={'inventory_info': inventory_data}
     )
     print(result)
     # json_result = json.loads('{"quoted_items": {"A4 paper": {"quantity": 100, "unit_price": 0.05, "discount": "0%", "item_total": 5.0}}, "unavailable_items": [], "total_price": 5.0, "bulk_discount": "0%"}')

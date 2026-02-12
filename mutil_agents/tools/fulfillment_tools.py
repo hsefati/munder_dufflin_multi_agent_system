@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, Union
 from sqlalchemy import create_engine
 from smolagents import tool
-from database_setup import create_transaction
+from mutil_agents.tools.database_setup import create_transaction
 from mutil_agents.tools.utils import get_stock_level, get_supplier_delivery_date
 
 # Database setup

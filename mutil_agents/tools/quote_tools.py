@@ -12,50 +12,57 @@ db_engine = create_engine("sqlite:///munder_difflin.db")
 
 
 @tool
-def get_quote_history_tool(search_terms: str) -> List[Dict]:
+def get_quote_history_tool(search_terms: List[str]) -> List[Dict]:
     """
-    Tool to retrieve quote history related to a customer's request.
+    Retrieves quote history.
 
     Args:
-        search_terms (str): Comma-separated string of terms to search for in quote explanations.
-
-    Returns:
-        List[Dict]: A list of matching quotes, each represented as a dictionary.
+        search_terms: A list of specific item names to search for (e.g., ["A4 paper"]).
     """
-    # Parse input string into a list of search terms
-    terms_list = [term.strip() for term in search_terms.split(",")]
+    # Guard: Ensure we aren't searching for nothing
+    if not search_terms or all(not s.strip() for s in search_terms):
+        return []
 
-    # Get quote history for the given search terms
-    return search_quote_history(search_terms=terms_list, limit=5)
+    return search_quote_history(search_terms=search_terms, limit=5)
 
 
 @tool
-def generate_quote_tool(items: str, quantities: str) -> Dict:
+def generate_quote_tool(items: List[str], quantities: List[int]) -> Dict:
     """
-    Tool to generate a detailed pricing quote for ordered items.
+    Generates a detailed pricing quote.
 
     Args:
-        items (str): Comma-separated list of item names
-        quantities (str): Comma-separated list of quantities (must match items)
-
-    Returns:
-        Dict: Quote with itemized breakdown, bulk discounts, and total
+        items: List of exact item names from available_items.
+        quantities: List of integers representing requested amounts.
     """
-    # Parse inputs
-    item_list = [item.strip() for item in items.split(",")]
-    qty_list = [int(qty.strip()) for qty in quantities.split(",")]
+    # 1. Guard against empty inputs from the Agent
+    if not items or not quantities:
+        return {
+            "error": "No items or quantities provided. If inventory is empty, do not call this tool."
+        }
 
-    # Get inventory data with unit prices
+    # 2. Guard against mismatched lengths
+    if len(items) != len(quantities):
+        return {
+            "error": f"Mismatched input: You provided {len(items)} items but {len(quantities)} quantities."
+        }
+
     inventory_df = pd.read_sql("SELECT * FROM inventory", db_engine)
-
     quote_items = []
     total_price = 0.0
 
-    for item, qty in zip(item_list, qty_list):
+    for item, qty in zip(items, quantities):
+        # Ensure qty is treated as int (Pydantic usually handles this, but safety first)
+        try:
+            qty = int(qty)
+        except (ValueError, TypeError):
+            continue
+
         item_data = inventory_df[inventory_df["item_name"] == item]
         if not item_data.empty:
             unit_price = item_data.iloc[0]["unit_price"]
-            # Apply bulk discounts
+
+            # Discount Logic
             if qty > 1000:
                 discount = 0.15
             elif qty > 500:
@@ -65,8 +72,7 @@ def generate_quote_tool(items: str, quantities: str) -> Dict:
             else:
                 discount = 0.0
 
-            discounted_price = unit_price * (1 - discount)
-            item_total = discounted_price * qty
+            item_total = (unit_price * (1 - discount)) * qty
             total_price += item_total
 
             quote_items.append(
@@ -75,13 +81,13 @@ def generate_quote_tool(items: str, quantities: str) -> Dict:
                     "quantity": qty,
                     "unit_price": unit_price,
                     "discount": f"{discount * 100:.0f}%",
-                    "item_total": item_total,
+                    "item_total": round(item_total, 2),
                 }
             )
 
     return {
         "quote_items": quote_items,
-        "total_amount": total_price,
+        "total_amount": round(total_price, 2),
         "quote_date": datetime.now().isoformat(),
     }
 
@@ -89,4 +95,4 @@ def generate_quote_tool(items: str, quantities: str) -> Dict:
 if __name__ == "__main__":
     # Example usage
     # print(get_quote_history_tool("stapler, printer paper"))
-    print(generate_quote_tool("A4 paper", "100"))
+    print(get_quote_history_tool("A4 paper"))

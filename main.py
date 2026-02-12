@@ -1,3 +1,4 @@
+import time
 import pandas as pd
 import os
 import dotenv
@@ -5,13 +6,17 @@ from sqlalchemy import create_engine
 from smolagents import (
     OpenAIServerModel,
 )
-from database_setup import init_database
-from agents.inventory_agent import InventoryAgent
-from agents.quote_agent import QuoteAgent
-from agents.customer_agent import CustomerAgent
-from agents.fulfillment_agent import FulfillmentAgent
-from agents.orchestrator_agent import OrchestratorAgent
-from tools.utils import generate_financial_report
+from mutil_agents.tools.database_setup import init_database
+# from mutil_agents.agents.inventory_agent import InventoryCheckerAgent
+# from mutil_agents.agents.inventory_management import InventoryManagerAgent
+from mutil_agents.agents.inventory_management_v2 import InventoryManagerAgent
+# from mutil_agents.agents.quote_agent import QuoteAgent
+from mutil_agents.agents.quote_agent_v2 import QuoteAgent
+from mutil_agents.agents.customer_agent import CustomerAgent
+# from mutil_agents.agents.fulfillment_agent import FulfillmentAgent
+from mutil_agents.agents.fulfillment_agent_v2 import FulfillmentAgent
+from mutil_agents.agents.orchestrator_agent import OrchestratorAgent
+from mutil_agents.tools.utils import generate_financial_report
 
 dotenv.load_dotenv()
 OPENAI_API_KEY = os.getenv("UDACITY_OPENAI_API_KEY")
@@ -62,12 +67,13 @@ def run_test_scenarios():
     current_inventory = report["inventory_value"]
 
     print("[SETUP] Creating agents...")
-    inventory_agent = InventoryAgent(model)
-    quote_agent = QuoteAgent(model)
-    customer_agent = CustomerAgent(model)
-    fulfillment_agent = FulfillmentAgent(model)
+    # inventory_checker_agent = InventoryCheckerAgent(model, verbosity_level=SMOLAGENT_VERBOSITY)
+    inventory_manager_agent = InventoryManagerAgent(model, verbosity_level=SMOLAGENT_VERBOSITY)
+    quote_agent = QuoteAgent(model, verbosity_level=SMOLAGENT_VERBOSITY)
+    customer_agent = CustomerAgent(model, verbosity_level=SMOLAGENT_VERBOSITY)
+    fulfillment_agent = FulfillmentAgent(model, verbosity_level=SMOLAGENT_VERBOSITY)
     orchestrator = OrchestratorAgent(
-        model, inventory_agent, quote_agent, customer_agent, fulfillment_agent
+        model, inventory_manager_agent, quote_agent, customer_agent, fulfillment_agent, verbosity_level=SMOLAGENT_VERBOSITY
     )
     print("All agents created successfully\n")
 
@@ -76,56 +82,56 @@ def run_test_scenarios():
     unfulfilled_count = 0
 
     count = 0
-    # for request_num, (idx, row) in enumerate(quote_requests_sample.iterrows(), 1):
-    target_index = 1
-    row = quote_requests_sample.loc[target_index]
-    request_date = row["request_date"].strftime("%Y-%m-%d")
+    for request_num, (idx, row) in enumerate(quote_requests_sample.iterrows(), 1):
+        target_index = 0
+        row = quote_requests_sample.loc[target_index]
+        request_date = row["request_date"].strftime("%Y-%m-%d")
 
-    print(f"\n=== Request {target_index} ===")
-    print(f"Context: {row['job']} organizing {row['event']}")
-    print(f"Request Date: {request_date}")
-    print(f"Cash Balance: ${current_cash:.2f}")
-    print(f"Inventory Value: ${current_inventory:.2f}")
+        print(f"\n=== Request {target_index} ===")
+        print(f"Context: {row['job']} organizing {row['event']}")
+        print(f"Request Date: {request_date}")
+        print(f"Cash Balance: ${current_cash:.2f}")
+        print(f"Inventory Value: ${current_inventory:.2f}")
 
-    # Process request
-    request_with_date = f"{row['request']} (Date of request: {request_date})"
+        # Process request
+        request_with_date = f"{row['request']} (Date of request: {request_date})"
 
-    response, fulfilled, fulfillment_details = orchestrator.process_customer_request(
-        request_with_date, request_date
-    )
+        response, fulfilled, fulfillment_details = orchestrator.process_customer_request(
+            request_with_date, request_date
+        )
 
-    if fulfilled:
-        fulfilled_count += 1
-    else:
-        unfulfilled_count += 1
+        if fulfilled:
+            fulfilled_count += 1
+        else:
+            unfulfilled_count += 1
 
-    # Update state
-    report = generate_financial_report(request_date)
-    current_cash = report["cash_balance"]
-    current_inventory = report["inventory_value"]
+        # Update state
+        report = generate_financial_report(request_date)
+        current_cash = report["cash_balance"]
+        current_inventory = report["inventory_value"]
 
-    print(f"Fulfilled: {fulfilled}")
-    print(f"Details: {fulfillment_details}")
-    print(f"Updated Cash: ${current_cash:.2f}")
-    print(f"Updated Inventory: ${current_inventory:.2f}")
+        print(f"Fulfilled: {fulfilled}")
+        print(f"Details: {fulfillment_details}")
+        print(f"Updated Cash: ${current_cash:.2f}")
+        print(f"Updated Inventory: ${current_inventory:.2f}")
 
-    results.append(
-        {
-            "request_id": target_index,
-            "request_date": request_date,
-            "cash_balance": current_cash,
-            "inventory_value": current_inventory,
-            "fulfilled": fulfilled,
-            "fulfillment_details": fulfillment_details,
-            "response": response,
-        }
-    )
+        results.append(
+            {
+                "request_id": target_index,
+                "request_date": request_date,
+                "cash_balance": current_cash,
+                "inventory_value": current_inventory,
+                "fulfilled": fulfilled,
+                "fulfillment_details": fulfillment_details,
+                "response": response,
+            }
+        )
 
-    # time.sleep(1)
-    # count += 1
-    # if count % 5 == 0:
-    #     break
-    # break
+        time.sleep(1)
+        count += 1
+        if count % 8 == 0:
+            break
+        # break
 
     # Final report
     final_date = quote_requests_sample["request_date"].max().strftime("%Y-%m-%d")

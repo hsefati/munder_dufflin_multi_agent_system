@@ -2,7 +2,8 @@
 
 import os
 import dotenv
-from smolagents import ToolCallingAgent, OpenAIServerModel, tool
+from pydantic import BaseModel
+from smolagents import ToolCallingAgent, OpenAIServerModel, tool, CodeAgent
 from mutil_agents.tools.inventory_tools import (
     check_inventory_tool,
     check_reorder_status_tool,
@@ -12,39 +13,57 @@ import json
 from typing import Dict, List
 
 
+class InventoryStatus(BaseModel):
+    available_items: Dict[str, int]
+    missing_items: Dict[str, int]
+
+
 @tool
 def final_answer(
     items: Dict[str, int] = {},
-    missing_items: List[str] = [],
-) -> str:
+    missing_items: Dict[str, int] = {},
+) -> dict:
     """
     Provides the final inventory report.
-    
+
     Args:
         items: Map of found items to quantities.
         missing_items: List of items requested but not found in the database.
     """
     if missing_items is None:
         missing_items = []
-        
-    return json.dumps(
-        {
-            "available_items": items,
-            "missing_items": missing_items,
-        }
-    )
 
-class InventoryCheckerAgent(ToolCallingAgent):
+    return {
+        "available_items": items,
+        "missing_items": missing_items,
+    }
+
+
+class InventoryCheckerAgent(CodeAgent):
     """Agent responsible ONLY for checking current inventory levels."""
-    
+
     def __init__(self, model: OpenAIServerModel, verbosity_level: int = 0):
         super().__init__(
             name="InventoryCheckerAgent",
             model=model,
-            tools=[check_inventory_tool, final_answer],  # Only inventory checking and final answer
+            tools=[
+                check_inventory_tool,
+                final_answer,
+            ],  # Only inventory checking and final answer
             verbosity_level=verbosity_level,
             description="""Specialized agent for checking current stock levels.
             You have access to real-time inventory data through check_inventory_tool.
+            
+            ### Example of final_answer input:
+            {
+                "items": {
+                    "A4 paper": 50,
+                    "Letter paper": 200
+                },
+                "missing_items": {
+                    "Legal paper": 100
+                }
+            }
             
             Your sole responsibility:
             - Check current stock levels for requested paper supplies
@@ -70,11 +89,9 @@ if __name__ == "__main__":
         api_base="https://openai.vocareum.com/v1",
         api_key=OPENAI_API_KEY,
     )
-    
+
     orchestrator = InventoryCheckerAgent(model=model, verbosity_level=1)
-    
-    result = orchestrator.run(
-        "I would like to request 100 Sheets of 'A4 paper'"
-    )
-    
+
+    result = orchestrator.run("I would like to request 100 Sheets of 'A4 paper'")
+
     print(result)

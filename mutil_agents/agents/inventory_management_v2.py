@@ -6,6 +6,7 @@ from smolagents import ToolCallingAgent, OpenAIServerModel, tool, CodeAgent
 from mutil_agents.tools.inventory_tools import (
     check_reorder_status_tool,
     check_delivery_timeline_tool,
+    check_inventory_tool
 )
 import json
 
@@ -39,7 +40,7 @@ def final_answer(
     Returns:
         The complete inventory analysis report.
     """
-    
+
     return {
         "available_items": available_items,
         "missing_items": missing_items,
@@ -59,42 +60,20 @@ class InventoryManagerAgent(CodeAgent):
             tools=[
                 check_reorder_status_tool,
                 check_delivery_timeline_tool,
-                final_answer,
+                check_inventory_tool,
+                final_answer
             ],
             verbosity_level=verbosity_level,
-            description="""You are a specialized inventory management agent. Follow this process:
-            
-            Your input will be provided in two variables:
-                1. 'available_items': A dictionary of item names to quantities in stock
-                2. 'missing_items': A dictionary of item names to quantities requested but not available
-
-            Follow this process:
-            STEP 1: Analyze the current inventory data provided
-            - Compare current stock levels against minimum thresholds
-            - Identify items at or below reorder points
-
-
-            STEP 2: For each low-stock or missing item:
-            - Use check_reorder_status_tool to determine exact reorder requirements
-            - Use check_delivery_timeline_tool to estimate supplier lead times
-            - Store the delivery timeline information for each item
-
-
-            STEP 3: Generate final report using final_answer tool with:
-            - available_items: All inventory items with quantities
-            - low_stock: Items below threshold (empty list if none)
-            - missing_items: Requested items not in inventory
-            - reorder_required: true if any item needs reorder, false otherwise
-            - delivery_timelines: Dictionary mapping item names to their delivery information from check_delivery_timeline_tool (e.g., {"A4 paper": {"supplier": "Office Depot", "lead_time_days": 5, "estimated_delivery": "2025-03-06"}})
-            
-            STEP 4: Call final_answer as your last action with all collected data from previous steps.
-
-
-            IMPORTANT: 
-            - Collect ALL delivery timeline data from check_delivery_timeline_tool calls
-            - Structure delivery data as a dictionary with item names as keys
-            - Always call final_answer as your last step with ALL collected information
-            - Pass delivery_timelines as a JSON string to final_answer""",
+            description="""
+    You are an expert Inventory Manager. When a user asks about stock:
+    1. First, check the current inventory levels.
+    2. Second, check the reorder status to see if levels are below the minimum required.
+    3. If a reorder is necessary (needs_reorder is True), use the delivery timeline tool 
+       to find out when new stock would arrive if ordered today.
+    4. Provide a consolidated summary: Current stock, whether a reorder is needed, 
+       and the expected arrival date for replenishment.
+    5. Always use the final_answer tool to return your response.
+    """,
         )
 
 
@@ -112,14 +91,14 @@ if __name__ == "__main__":
     agent = InventoryManagerAgent(model=model, verbosity_level=1)
 
     inventory_dict = {"available_items": {"A4 paper": 100}, "missing_items": []}
-    # invetory_dict = {
-    #     "available_items": {},
-    #     "missing_items": {
-    #         "A4 glossy paper": 200,
-    #         "heavy cardstock (white)": 100,
-    #         "colored paper (assorted colors)": 100,
-    #     },
-    # }
+    inventory_dict = {
+        "available_items": {},
+        "missing_items": {
+            "A4 glossy paper": 200,
+            "heavy cardstock (white)": 100,
+            "colored paper (assorted colors)": 100,
+        },
+    }
     result = agent.run(
         "Please process the inventory report for the provided customer request.",
         additional_args={
