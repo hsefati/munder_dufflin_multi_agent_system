@@ -143,12 +143,11 @@ class OrchestratorAgent(CodeAgent):
             print(f"Warning: Could not parse customer decision: {e}")
         return CustomerDecision(decision="DECLINE", reason="Unable to parse decision")
 
-    def _parse_fulfillment_response(self, response: str) -> FulfillmentReceipt:
+    def _parse_fulfillment_response(self, response: dict) -> FulfillmentReceipt:
         """Parse fulfillment agent response into FulfillmentReceipt object."""
         try:
-            data = self._extract_json_from_response(response)
-            if data:
-                return FulfillmentReceipt(**data)
+            if response:
+                return FulfillmentReceipt(**response)
         except Exception as e:
             print(f"Warning: Could not parse fulfillment response: {e}")
         return FulfillmentReceipt(
@@ -182,7 +181,10 @@ class OrchestratorAgent(CodeAgent):
         try:
             # STEP 1A: Inventory Check (InventoryCheckerAgent)
             print("\n[STEP 1A] Checking current inventory levels...")
-            checker_response = self.inventory_manager_agent.run(customer_request)
+            checker_response = self.inventory_manager_agent.run(
+                "Please generrate the inventory report for the provided customer request.",
+                additional_args={"customer_request": customer_request},
+            )
             print(f"\n[Inventory Checker Agent Response]:\n{checker_response}\n")
             inventory_data = self._parse_inventory_manager_response(checker_response)
             print(f"[Parsed Inventory Data]: {inventory_data}\n")
@@ -205,9 +207,8 @@ class OrchestratorAgent(CodeAgent):
             # quote_context = f"Customer request: {customer_request}\nInventory Status: {inventory_manager_data.dict()}"
             # quote_response = self.quote_agent.run(quote_context)
             quote_response = self.quote_agent.run(
-                "Based on the inventory_data, generate a quote for the missing_items. "
-                "Assume we need to order 200 units of each to meet minimum stock levels.",
-                additional_args={"inventory_info": inventory_data},
+                "Based on the given inventory information, generate a quote.",
+                additional_args={"inventory_info": inventory_data.model_dump()},
             )
             print(f"\n[Quote Agent Response]:\n{quote_response}\n")
             quote_data = self._parse_quote_response(quote_response)
@@ -217,49 +218,50 @@ class OrchestratorAgent(CodeAgent):
             print("[STEP 3] Customer Review and Decision...")
             # customer_context = f"Review this quote and decide:\nTotal Price: ${quote_data.total_price}\nItems: {quote_data.quoted_items}\nDiscount: {quote_data.bulk_discount}"
             # customer_response = self.customer_agent.run(customer_context)
-            customer_response = self.customer_agent.run(
-                """
-    Review the 'quote_summary' and 'original_request'. 
-    
-    1. Check if the 'quoted_items' match what the customer wanted.
-    2. Evaluate if the 'bulk_discount' makes the deal attractive.
-    3. IMPORTANT: Check 'unavailable_items'. If critical items are missing, 
-       consider if the delivery delay is acceptable.
-    
-    Provide a final decision (Approve/Decline) and a brief justification 
-    mentioning the total price and the impact of discounts.
-    """,
-                additional_args={
-                    "quote_summary": {
-                        "total": quote_data.total_price,
-                        "items": quote_data.quoted_items,
-                        "discount_applied": quote_data.bulk_discount,
-                        "out_of_stock": quote_data.unavailable_items,
-                    },
-                    "original_request": customer_request,
-                },
-            )
-            print(f"\n[Customer Agent Response]:\n{customer_response}\n")
-            customer_decision = self._parse_customer_decision(customer_response)
-            print(f"[Parsed Customer Decision]: {customer_decision}\n")
+            # customer_response = self.customer_agent.run(
+            #     """
+            #     Review the 'quote_summary' and 'original_request'.
+
+            #     1. Check if the 'quoted_items' match what the customer wanted.
+            #     2. Evaluate if the 'bulk_discount' makes the deal attractive.
+            #     3. IMPORTANT: Check 'unavailable_items'. If critical items are missing,
+            #     consider if the delivery delay is acceptable.
+
+            #     Provide a final decision (Approve/Decline) and a brief justification
+            #     mentioning the total price and the impact of discounts.
+            #     """,
+            #     additional_args={
+            #         "original_request": customer_request,
+            #         "quote_summary": {
+            #             "total": quote_data.total_price,
+            #             "items": quote_data.quoted_items,
+            #             "discount_applied": quote_data.bulk_discount,
+            #             "out_of_stock": quote_data.unavailable_items,
+            #             "estimated_delivery": inventory_data.delivery_timelines,
+            #         },
+            #     },
+            # )
+            # print(f"\n[Customer Agent Response]:\n{customer_response}\n")
+            # customer_decision = self._parse_customer_decision(customer_response)
+            # print(f"[Parsed Customer Decision]: {customer_decision}\n")
 
             # STEP 4: Order Fulfillment - Only if approved
-            if customer_decision.decision.upper() == "APPROVE":
-                print("[STEP 4] Executing order fulfillment...")
-                fulfillment_response = self.fulfillment_agent.run(
-    """
-    The customer has made a decision. 
-    If approved, please process the fulfillment for all items in the quote.
-    Use today's date (2025-04-01) for the transaction_date.
-    """,
-    additional_args={
-        "quote_data": quote_data,
-        "decision": customer_decision # This contains "APPROVE" or "DECLINE"
-    }
-)
-            else:
-                print("[STEP 4] Order Declined - No fulfillment")
-                fulfillment_response = f"Customer declined: {customer_decision.reason}"
+            # if customer_decision.decision.upper() == "APPROVE":
+            print("[STEP 4] Executing order fulfillment...")
+            fulfillment_response = self.fulfillment_agent.run(
+                """
+                The customer has made a decision. 
+                please process the fulfillment for all items in the quote.
+                """,
+                additional_args={
+                    "quote_data": quote_data.model_dump(),  # Convert Pydantic model to dict for agent input,
+                    "estimated_delivery": inventory_data.delivery_timelines,  # Provide delivery timelines for context
+                    "date_of_request": request_date,  # Provide request date for context
+                },
+            )
+            # else:
+            #     print("[STEP 4] Order Declined - No fulfillment")
+            #     fulfillment_response = f"Customer declined: {customer_decision.reason}"
 
             print(f"\n[Fulfillment Agent Response]:\n{fulfillment_response}\n")
             fulfillment_data = self._parse_fulfillment_response(fulfillment_response)
@@ -270,10 +272,7 @@ class OrchestratorAgent(CodeAgent):
                 fulfilled = True
                 fulfillment_details = f"Order fulfilled with Transaction ID: {fulfillment_data.transaction_id}, Delivery: {fulfillment_data.delivery_date}"
             else:
-                fulfilled = (
-                    customer_decision.decision.upper() == "APPROVE"
-                    and fulfillment_data.status.lower() != "pending"
-                )
+                fulfilled = fulfillment_data.status.lower() != "pending"
                 fulfillment_details = f"Status: {fulfillment_data.status}, Transaction: {fulfillment_data.transaction_id}"
 
             # FINAL RESPONSE - Structured Summary
@@ -293,14 +292,10 @@ STEP 1A - INVENTORY CHECK
 STEP 2 - PRICING QUOTE
   Total Price: ${quote_data.total_price:.2f}
   Bulk Discount: {quote_data.bulk_discount}
-  Quoted Items: {json.dumps(quote_data.quoted_items, indent=2)}
+  Quoted Items: {(quote_data.quoted_items)}
   Unavailable Items: {quote_data.unavailable_items}
 
-STEP 3 - CUSTOMER DECISION
-  Decision: {customer_decision.decision}
-  Reason: {customer_decision.reason}
-
-STEP 4 - ORDER FULFILLMENT
+STEP 3 - ORDER FULFILLMENT
   Status: {fulfillment_data.status}
   Transaction ID: {fulfillment_data.transaction_id}
   Delivery Date: {fulfillment_data.delivery_date}

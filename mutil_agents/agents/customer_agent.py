@@ -73,39 +73,21 @@ if __name__ == "__main__":
 
     quote_data = {
         "quoted_items": {
-            "A4 glossy paper": {
-                "quantity": 200,
+            "Paper plates": {
+                "quantity": 100,
                 "unit_price": 0.1,
                 "discount": "0%",
-                "item_total": 20.0,
-            },
-            "heavy cardstock (white)": {
-                "quantity": 200,
-                "unit_price": 0.15,
-                "discount": "0%",
-                "item_total": 30.0,
-            },
-            "colored paper (assorted colors)": {
-                "quantity": 200,
-                "unit_price": 0.12,
-                "discount": "0%",
-                "item_total": 24.0,
-            },
+                "item_total": 10.0,
+            }
         },
         "unavailable_items": [],
-        "total_price": 74.0,
+        "total_price": 10.0,
         "bulk_discount": "0%",
     }
 
     customer_request = """
-I would like to request the following paper supplies for the ceremony:
-
-- 200 sheets of A4 glossy paper
-- 100 sheets of heavy cardstock (white)
-- 100 sheets of colored paper (assorted colors)
-
-I need these supplies delivered by April 15, 2025. Thank you. (Date of request: 2025-04-01)
-"""
+    customer_request": "i would like to buy 100 of 'Paper plates'  (Date of request: 2025-04-01)
+    """
 
     result = customer.run(
         """

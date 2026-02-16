@@ -338,3 +338,18 @@ def search_quote_history(search_terms: List[str], limit: int = 5) -> List[Dict]:
     
     logger.info(f"Found {len(records)} matching quotes")
     return records
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.DEBUG,  # Set to DEBUG, INFO, WARNING, ERROR, or CRITICAL
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler("munder_difflin.log"),  # Log to file
+            logging.StreamHandler(),  # Also log to console
+        ],
+    )
+
+    # Example usage of the utility functions
+    stock_level = get_stock_level("Paper plates", "2025-12-31")
+    logger.info(f"Stock level for Paper plates: {stock_level}")

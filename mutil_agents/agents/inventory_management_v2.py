@@ -6,42 +6,42 @@ from smolagents import ToolCallingAgent, OpenAIServerModel, tool, CodeAgent
 from mutil_agents.tools.inventory_tools import (
     check_reorder_status_tool,
     check_delivery_timeline_tool,
-    check_inventory_tool
+    check_inventory_tool,
 )
 import json
 
 
 class InventoryManagerStatus(BaseModel):
+    requested_items: Dict[str, int]
     available_items: Dict[str, int]
-    missing_items: list
-    low_stock: list
-    reorder_required: bool
+    missing_items: List[str] = []
+    low_stock: List[str] = []
+    reorder_required: bool = False
     delivery_timelines: Dict[str, str] = {}
 
 
 @tool
 def final_answer(
+    requested_items: Dict[str, int],  # <--- Added this
     available_items: Dict[str, int],
     low_stock: List[str],
     missing_items: List[str] = [],
     reorder_required: bool = False,
-    delivery_timelines: Dict[str, Dict] = {},
+    delivery_timelines: Dict[str, str] = {},
 ) -> dict:
     """
     Provides the final structured inventory report. This MUST be your final action.
 
     Args:
+        requested_items: Map of item names to the quantities the user requested.
         available_items: Map of item names to quantities currently in stock.
         low_stock: List of item names currently below the safety threshold.
         missing_items: List of requested items that were not found in inventory.
         reorder_required: Whether any items need to be reordered.
-        delivery_timelines: Map of item names to their specific delivery/supplier info.
-
-    Returns:
-        The complete inventory analysis report.
+        delivery_timelines: Map of item names to their estimated delivery dates.
     """
-
     return {
+        "requested_items": requested_items, # <--- Added this
         "available_items": available_items,
         "missing_items": missing_items,
         "low_stock": low_stock,
@@ -61,7 +61,7 @@ class InventoryManagerAgent(CodeAgent):
                 check_reorder_status_tool,
                 check_delivery_timeline_tool,
                 check_inventory_tool,
-                final_answer
+                final_answer,
             ],
             verbosity_level=verbosity_level,
             description="""
@@ -90,20 +90,12 @@ if __name__ == "__main__":
 
     agent = InventoryManagerAgent(model=model, verbosity_level=1)
 
-    inventory_dict = {"available_items": {"A4 paper": 100}, "missing_items": []}
-    inventory_dict = {
-        "available_items": {},
-        "missing_items": {
-            "A4 glossy paper": 200,
-            "heavy cardstock (white)": 100,
-            "colored paper (assorted colors)": 100,
-        },
+    customer_request = {
+        "customer_request": "i would like to buy 100 of 'Paper plates'  (Date of request: 2025-04-01)"
     }
     result = agent.run(
-        "Please process the inventory report for the provided customer request.",
-        additional_args={
-            "current_inventory": inventory_dict,
-        },
+        "Please generate the inventory report for the provided customer request.",
+        additional_args={"customer_request": customer_request},
     )
 
     print("Raw Result:")

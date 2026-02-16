@@ -1,5 +1,6 @@
 """Fulfillment Agent - executes orders and manages shipment logistics."""
 
+import logging
 import os
 from typing import Dict
 import dotenv
@@ -15,8 +16,8 @@ class FulfillmentReceipt(BaseModel):
     status: str
     transaction_id: str
     delivery_date: str
-    
-    
+
+
 @tool
 def final_answer(status: str, transaction_id: str, delivery_date: str) -> Dict:
     """
@@ -31,7 +32,7 @@ def final_answer(status: str, transaction_id: str, delivery_date: str) -> Dict:
     return {
         "status": status,
         "transaction_id": transaction_id,
-        "delivery_date": delivery_date
+        "delivery_date": delivery_date,
     }
 
 
@@ -42,20 +43,22 @@ class FulfillmentAgent(CodeAgent):
         super().__init__(
             name="FulfillmentAgent",
             model=model,
-            tools=[create_order_fulfillment_tool, check_delivery_timeline_tool, final_answer],
+            tools=[
+                create_order_fulfillment_tool,
+                check_delivery_timeline_tool,
+                final_answer,
+            ],
             verbosity_level=verbosity_level,
             description=""""
             You are the Fulfillment & Logistics Coordinator. Your goal is to finalize sales transactions.
             
             OPERATIONAL LOGIC:
-            1. You will receive a 'quote_data' object and a 'decision' string via additional_args.
-            2. If 'decision' is NOT "APPROVE", do not process the transaction. Briefly acknowledge the cancellation.
-            3. If 'decision' is "APPROVE":
-               - Loop through each item in 'quote_data'.
-               - Call 'create_order_fulfillment_tool' for each item.
-               - If the tool returns a 'success', record the Transaction ID.
-               - If the tool returns an 'error' (e.g., Insufficient stock), call 'check_delivery_timeline_tool' 
-                 to provide the customer with an estimated restock/delivery date.
+            1. You will receive a 'quote_data' object
+            - Loop through each item in 'quote_data'.
+            - Call 'create_order_fulfillment_tool' for each item.
+            - If the tool returns a 'success', record the Transaction ID.
+            - If the tool returns an 'error' (e.g., Insufficient stock), call 'check_delivery_timeline_tool' 
+                to provide the customer with an estimated restock/delivery date.
             4. Provide a final summary of successfully processed items and a warning for items delayed.
             5. Use the 'final_answer' tool to return a structured receipt with the overall status, transaction IDs, and delivery dates.
             """,
@@ -63,6 +66,14 @@ class FulfillmentAgent(CodeAgent):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+    level=logging.WARNING,  # Set to DEBUG, INFO, WARNING, ERROR, or CRITICAL
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("munder_difflin.log"),  # Log to file
+        logging.StreamHandler(),  # Also log to console
+    ],
+)
     dotenv.load_dotenv()
     OPENAI_API_KEY = os.getenv("UDACITY_OPENAI_API_KEY")
     SMOLAGENT_VERBOSITY = int(os.getenv("SMOLAGENT_VERBOSITY", "0"))
@@ -75,47 +86,55 @@ if __name__ == "__main__":
 
     agent = FulfillmentAgent(model=model, verbosity_level=1)
 
-    quote_data = {
-        "quoted_items": {
-            "A4 glossy paper": {
-                "quantity": 200,
-                "unit_price": 0.1,
-                "discount": "0%",
-                "item_total": 20.0,
-            },
-            "heavy cardstock (white)": {
-                "quantity": 200,
-                "unit_price": 0.15,
-                "discount": "0%",
-                "item_total": 30.0,
-            },
-            "colored paper (assorted colors)": {
-                "quantity": 200,
-                "unit_price": 0.12,
-                "discount": "0%",
-                "item_total": 24.0,
-            },
-        },
-        "unavailable_items": [],
-        "total_price": 74.0,
-        "bulk_discount": "0%",
-    }
+    # quote_data = {
+    #     "quoted_items": {
+    #         "A4 glossy paper": {
+    #             "quantity": 200,
+    #             "unit_price": 0.1,
+    #             "discount": "0%",
+    #             "item_total": 20.0,
+    #         },
+    #         "heavy cardstock (white)": {
+    #             "quantity": 200,
+    #             "unit_price": 0.15,
+    #             "discount": "0%",
+    #             "item_total": 30.0,
+    #         },
+    #         "colored paper (assorted colors)": {
+    #             "quantity": 200,
+    #             "unit_price": 0.12,
+    #             "discount": "0%",
+    #             "item_total": 24.0,
+    #         },
+    #     },
+    #     "unavailable_items": [],
+    #     "total_price": 74.0,
+    #     "bulk_discount": "0%",
+    # }
 
-    customer_decision = {
-        "decision": "APPROVE",
-        "reason": "The total price is $74.0, with no discounts applied. All requested items are available.",
+    quote_data = {
+        "quote_data": {
+            "quoted_items": {
+                "Paper plates": {
+                    "quantity": 748,
+                    "unit_price": 0.1,
+                    "discount": "10%",
+                    "item_total": 67.32,
+                }
+            },
+            "unavailable_items": [],
+            "total_price": 67.32,
+            "bulk_discount": "10%",
+        }
     }
 
     fulfillment_response = agent.run(
         """
     The customer has made a decision. 
-    If approved, please process the fulfillment for all items in the quote.
-    Use today's date (2025-04-01) for the transaction_date.
+    please process the fulfillment for all items in the quote.
     """,
-        additional_args={
-            "quote_data": quote_data,
-            "decision": customer_decision,  # This contains "APPROVE" or "DECLINE"
-        },
+        additional_args={"quote_data": quote_data},
     )
 
-    print(fulfillment_response)
+    result= FulfillmentReceipt(**fulfillment_response)
+    print(result.model_dump())

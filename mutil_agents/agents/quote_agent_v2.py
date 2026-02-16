@@ -128,41 +128,49 @@ if __name__ == "__main__":
     #     },
     # }
 
-    inventory_manager_data = {
-        "available_items": {},
-        "missing_items": [
-            "A4 glossy paper",
-            "heavy cardstock (white)",
-            "colored paper (assorted colors)",
-        ],
+    # inventory_manager_data = {
+    #     "available_items": {},
+    #     "missing_items": [
+    #         "A4 glossy paper",
+    #         "heavy cardstock (white)",
+    #         "colored paper (assorted colors)",
+    #     ],
+    #     "low_stock": [],
+    #     "reorder_required": False,
+    #     "delivery_timelines": {},
+    # }
+    # inventory_data = {
+    #     "available_items": {
+    #         "A4 glossy paper": 0,
+    #         "heavy cardstock (white)": 0,
+    #         "colored paper (assorted colors)": 0,
+    #     },
+    #     "missing_items": [
+    #         "A4 glossy paper",
+    #         "heavy cardstock (white)",
+    #         "colored paper (assorted colors)",
+    #     ],
+    #     "low_stock": [],
+    #     "reorder_required": True,
+    #     "delivery_timelines": {
+    #         "A4 glossy paper": "2025-04-05",
+    #         "heavy cardstock (white)": "2025-04-02",
+    #         "colored paper (assorted colors)": "2025-04-02",
+    #     },
+    # }
+
+    inventory_data = {
+        "requested_items": {"Paper plates": 100},
+        "available_items": {"Paper plates": 748},
+        "missing_items": [],
         "low_stock": [],
         "reorder_required": False,
         "delivery_timelines": {},
     }
-    inventory_data = {
-        "available_items": {
-            "A4 glossy paper": 0,
-            "heavy cardstock (white)": 0,
-            "colored paper (assorted colors)": 0,
-        },
-        "missing_items": [
-            "A4 glossy paper",
-            "heavy cardstock (white)",
-            "colored paper (assorted colors)",
-        ],
-        "low_stock": [],
-        "reorder_required": True,
-        "delivery_timelines": {
-            "A4 glossy paper": "2025-04-05",
-            "heavy cardstock (white)": "2025-04-02",
-            "colored paper (assorted colors)": "2025-04-02",
-        },
-    }
 
     result = orchestrator.run(
-        "Based on the inventory_data, generate a quote for the missing_items. "
-        "Assume we need to order 200 units of each to meet minimum stock levels.",
-        additional_args={'inventory_info': inventory_data}
+        "Based on the given inventory information, generate a quote.",
+        additional_args={"inventory_info": inventory_data},
     )
     print(result)
     # json_result = json.loads('{"quoted_items": {"A4 paper": {"quantity": 100, "unit_price": 0.05, "discount": "0%", "item_total": 5.0}}, "unavailable_items": [], "total_price": 5.0, "bulk_discount": "0%"}')

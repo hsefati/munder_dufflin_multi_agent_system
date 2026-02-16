@@ -113,61 +113,62 @@ def run_test_scenarios():
     )
     print("All agents created successfully\n")
 
-    results = []
+    results = [] 
     fulfilled_count = 0
     unfulfilled_count = 0
 
-    count = 0
-    for request_num, (idx, row) in enumerate(quote_requests_sample.iterrows(), 1):
-        target_index = 0
-        row = quote_requests_sample.loc[target_index]
-        request_date = row["request_date"].strftime("%Y-%m-%d")
+    # count = 0
+    # for request_num, (idx, row) in enumerate(quote_requests_sample.iterrows(), 1):
+    # MANUAL DEBUG: Set request_num here to debug a specific request
+    request_num = 0
+    row = quote_requests_sample.loc[request_num]
+    request_date = row["request_date"].strftime("%Y-%m-%d")
 
-        print(f"\n=== Request {target_index} ===")
-        print(f"Context: {row['job']} organizing {row['event']}")
-        print(f"Request Date: {request_date}")
-        print(f"Cash Balance: ${current_cash:.2f}")
-        print(f"Inventory Value: ${current_inventory:.2f}")
+    print(f"\n=== Request {request_num} ===")
+    print(f"Context: {row['job']} organizing {row['event']}")
+    print(f"Request Date: {request_date}")
+    print(f"Cash Balance: ${current_cash:.2f}")
+    print(f"Inventory Value: ${current_inventory:.2f}")
 
-        # Process request
-        request_with_date = f"{row['request']} (Date of request: {request_date})"
+    # Process request
+    request_with_date = f"{row['request']} (Date of request: {request_date})"
 
-        response, fulfilled, fulfillment_details = (
-            orchestrator.process_customer_request(request_with_date, request_date)
-        )
+    response, fulfilled, fulfillment_details = (
+        orchestrator.process_customer_request(request_with_date, request_date)
+    )
 
-        if fulfilled:
-            fulfilled_count += 1
-        else:
-            unfulfilled_count += 1
+    if fulfilled:
+        fulfilled_count += 1
+    else:
+        unfulfilled_count += 1
 
-        # Update state
-        report = generate_financial_report(request_date)
-        current_cash = report["cash_balance"]
-        current_inventory = report["inventory_value"]
+    # Update state
+    report = generate_financial_report(request_date)
+    current_cash = report["cash_balance"]
+    current_inventory = report["inventory_value"]
 
-        print(f"Fulfilled: {fulfilled}")
-        print(f"Details: {fulfillment_details}")
-        print(f"Updated Cash: ${current_cash:.2f}")
-        print(f"Updated Inventory: ${current_inventory:.2f}")
+    print(f"Fulfilled: {fulfilled}")
+    print(f"Details: {fulfillment_details}")
+    print(f"Updated Cash: ${current_cash:.2f}")
+    print(f"Updated Inventory: ${current_inventory:.2f}")
 
-        results.append(
-            {
-                "request_id": target_index,
-                "request_date": request_date,
-                "cash_balance": current_cash,
-                "inventory_value": current_inventory,
-                "fulfilled": fulfilled,
-                "fulfillment_details": fulfillment_details,
-                "response": response,
-            }
-        )
+    results.append(
+        {
+            "request_id": request_num,
+            "request_date": request_date,
+            "cash_balance": current_cash,
+            "inventory_value": current_inventory,
+            "fulfilled": fulfilled,
+            "fulfillment_details": fulfillment_details,
+            "response": response,
+        }
+    )
 
-        time.sleep(1)
-        count += 1
-        if count % 8 == 0:
-            break
-        break
+    # time.sleep(1)
+        # count += 1
+        # if count % 5 == 0:
+            # break
+        # break
 
     # Final report
     final_date = quote_requests_sample["request_date"].max().strftime("%Y-%m-%d")
@@ -189,8 +190,12 @@ def run_test_scenarios():
                 f"Request {result['request_id']}: ${initial_cash:.2f} -> ${result['cash_balance']:.2f} | Fulfilled: {result['fulfilled']}"
             )
 
-    # Save results
-    pd.DataFrame(results).to_csv("test_results.csv", index=False)
+    # Save results - append to existing CSV if it exists
+    results_df = pd.DataFrame(results)
+    if os.path.exists("test_results.csv"):
+        existing_df = pd.read_csv("test_results.csv")
+        results_df = pd.concat([existing_df, results_df], ignore_index=True)
+    results_df.to_csv("test_results.csv", index=False)
     return results
 
 
