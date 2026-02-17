@@ -1,21 +1,21 @@
-import time
-import pandas as pd
-import os
-import dotenv
-from sqlalchemy import create_engine
-from smolagents import (
-    OpenAIServerModel,
-)
 import logging
-from mutil_agents.tools.tools import init_database, generate_financial_report
+import os
+import time
+
+import dotenv
+import pandas as pd
+from smolagents import OpenAIServerModel
+from sqlalchemy import create_engine
+
 from mutil_agents.agents.inventory_manager import InventoryManagerAgent
+from mutil_agents.agents.orchestrator import Orchestrator
 from mutil_agents.agents.quoting_agent import QuotingSpecialistAgent
 from mutil_agents.agents.sales_manager import SalesFinanceAgent
-from mutil_agents.agents.orchestrator import Orchestrator
+from mutil_agents.tools.tools import generate_financial_report, init_database
 
 dotenv.load_dotenv()
 OPENAI_API_KEY = os.getenv("UDACITY_OPENAI_API_KEY")
-SMOLAGENT_VERBOSITY = int(os.getenv("SMOLAGENT_VERBOSITY", "0"))
+SMOLAGENT_VERBOSITY = int(os.getenv("SMOLAGENT_VERBOSITY", "1"))
 LOGGING_LEVEL = os.getenv("LOGGING_LEVEL", "INFO")  # Default to INFO level
 
 if LOGGING_LEVEL.upper() == "DEBUG":

@@ -1,17 +1,12 @@
-from smolagents import CodeAgent, OpenAIServerModel
-
+import os
 from typing import List
 
-import os
-
 import dotenv
+from smolagents import CodeAgent, OpenAIServerModel
 
 from mutil_agents.agents.inventory_manager import InventoryManagerAgent
-
 from mutil_agents.agents.quoting_agent import QuotingSpecialistAgent
-
 from mutil_agents.agents.sales_manager import SalesFinanceAgent
-
 from mutil_agents.config import get_simulation_date_str
 
 

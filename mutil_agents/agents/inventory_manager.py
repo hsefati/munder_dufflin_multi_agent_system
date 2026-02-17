@@ -1,23 +1,17 @@
 import os
+from datetime import datetime, timedelta
+from typing import Dict, List
+
 import dotenv
 import pandas as pd
-from smolagents import CodeAgent, tool, OpenAIServerModel
-from typing import Dict, List
-from datetime import datetime, timedelta
+from smolagents import CodeAgent, OpenAIServerModel, tool
 from sqlalchemy import create_engine
 
-from mutil_agents.config import (
-    SIMULATION_DATE,
-    get_simulation_date_str,
-    get_simulation_date,
-)
-
-from mutil_agents.tools.tools import (
-    get_stock_level,
-    get_all_inventory,
-    get_supplier_delivery_date,
-    create_transaction,
-)
+from mutil_agents.config import (SIMULATION_DATE, get_simulation_date,
+                                 get_simulation_date_str)
+from mutil_agents.tools.tools import (create_transaction, get_all_inventory,
+                                      get_stock_level,
+                                      get_supplier_delivery_date)
 
 
 @tool

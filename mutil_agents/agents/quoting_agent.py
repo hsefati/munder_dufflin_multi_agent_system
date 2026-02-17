@@ -1,16 +1,12 @@
-from smolagents import CodeAgent, tool
+from datetime import datetime
+from typing import Dict, List
 
 import pandas as pd
-
-from datetime import datetime
-
+from smolagents import CodeAgent, tool
 from sqlalchemy import create_engine
 
-from typing import List, Dict
-
-from mutil_agents.tools.tools import search_quote_history
-
 from mutil_agents.config import get_simulation_date_str
+from mutil_agents.tools.tools import search_quote_history
 
 db_engine = create_engine("sqlite:///munder_difflin.db")
 

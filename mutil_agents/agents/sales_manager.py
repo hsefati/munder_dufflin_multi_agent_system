@@ -1,15 +1,11 @@
+from typing import Dict, List
+
 from smolagents import CodeAgent, OpenAIServerModel, tool
 
-from typing import List, Dict
-
-from mutil_agents.tools.tools import (
-    create_transaction,
-    get_cash_balance,
-    generate_financial_report,
-)
-
 from mutil_agents.config import get_simulation_date, get_simulation_date_str
-
+from mutil_agents.tools.tools import (create_transaction,
+                                      generate_financial_report,
+                                      get_cash_balance)
 
 # --- Tool Definitions ---
 
