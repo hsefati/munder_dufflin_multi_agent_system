@@ -1,13 +1,15 @@
 from smolagents import CodeAgent, OpenAIServerModel, tool
 
-# Import shared resources
-# We assume the starter code helpers are in 'utils.py'
+from typing import List, Dict
+
 from mutil_agents.tools.tools import (
     create_transaction,
     get_cash_balance,
     generate_financial_report,
 )
+
 from mutil_agents.config import get_simulation_date, get_simulation_date_str
+
 
 # --- Tool Definitions ---
 
@@ -17,8 +19,7 @@ def finalize_sale(item_name: str, quantity: int, total_price: float) -> str:
     """
     Records a finalized sales transaction in the company database.
 
-    WARNING: This action is permanent. Only call this tool when the customer has explicitly
-    confirmed they want to proceed with the purchase.
+    NOTE: If you have multiple items, use 'batch_finalize_sales' instead.
 
     Args:
         item_name (str): The name of the item being sold.
@@ -26,13 +27,11 @@ def finalize_sale(item_name: str, quantity: int, total_price: float) -> str:
         total_price (float): The final agreed-upon price (after any discounts).
 
     Returns:
-        str: A confirmation message with the transaction ID, or an error message if failed.
+        str: A confirmation message with the transaction ID.
     """
     try:
-        # We use the simulation date to ensure the record matches the current game time
         transaction_date = get_simulation_date()
 
-        # Call the real database helper
         transaction_id = create_transaction(
             item_name=item_name,
             transaction_type="sales",
@@ -51,11 +50,68 @@ def finalize_sale(item_name: str, quantity: int, total_price: float) -> str:
 
 
 @tool
+def batch_finalize_sales(items: List[Dict[str, any]]) -> str:
+    """
+    Records MULTIPLE finalized sales transactions in the company database at once.
+    This is a BATCH operation - call this once instead of calling finalize_sale multiple times.
+
+    Args:
+        items: A list of dictionaries, each containing:
+            - 'item_name': str - The name of the item
+            - 'quantity': int - The number of units sold
+            - 'total_price': float - The final price for this item
+
+    Returns:
+        str: A comprehensive report of all sales transactions.
+
+    Example:
+        items = [
+            {'item_name': 'A4 glossy paper', 'quantity': 200, 'total_price': 180.00},
+            {'item_name': 'heavy cardstock', 'quantity': 100, 'total_price': 90.00}
+        ]
+    """
+    transaction_date = get_simulation_date()
+    results = []
+    transaction_ids = []
+    grand_total = 0.0
+
+    for item in items:
+        item_name = item["item_name"]
+        quantity = item["quantity"]
+        total_price = item["total_price"]
+
+        try:
+            transaction_id = create_transaction(
+                item_name=item_name,
+                transaction_type="sales",
+                quantity=quantity,
+                price=total_price,
+                date=transaction_date,
+            )
+
+            transaction_ids.append(transaction_id)
+            grand_total += total_price
+
+            results.append(
+                f"✓ {item_name}: {quantity} units, ${total_price:.2f}, TxID: {transaction_id}"
+            )
+
+        except Exception as e:
+            results.append(f"✗ {item_name}: ERROR - {str(e)}")
+
+    # Format output
+    output = ["=== BATCH SALES REPORT ==="]
+    output.extend(results)
+    output.append(f"\n**GRAND TOTAL REVENUE: ${grand_total:.2f}**")
+    output.append(f"Transaction IDs: {', '.join(map(str, transaction_ids))}")
+
+    return "\n".join(output)
+
+
+@tool
 def check_company_funds() -> str:
     """
     Checks the current liquid cash balance of the company.
-
-    Use this to verify if the company is solvent or to report on financial health.
 
     Returns:
         str: A formatted string stating the current cash balance.
@@ -70,19 +126,12 @@ def generate_full_report() -> str:
     """
     Generates a comprehensive financial report for the company.
 
-    This includes:
-    - Cash balance
-    - Total inventory value
-    - Top selling products
-    - List of current assets
-
     Returns:
         str: A detailed, multi-line string summary of the report.
     """
     date_str = get_simulation_date_str()
     report_data = generate_financial_report(date_str)
 
-    # Format the dictionary into a readable string for the LLM
     summary = [f"--- Financial Report (As of {date_str}) ---"]
     summary.append(f"Cash Balance: ${report_data['cash_balance']:,.2f}")
     summary.append(f"Inventory Value: ${report_data['inventory_value']:,.2f}")
@@ -100,12 +149,7 @@ def generate_full_report() -> str:
 
 class SalesFinanceAgent(CodeAgent):
     """
-    A specialized agent responsible for closing deals and monitoring finances.
-
-    Capabilities:
-    1. Finalize Sales: Commits orders to the database (Revenue).
-    2. Monitor Funds: Checks cash flow.
-    3. Reporting: Generates financial summaries.
+    A specialized agent responsible for finalizing transactions and monitoring finances.
     """
 
     def __init__(self, model, **kwargs):
@@ -116,28 +160,48 @@ class SalesFinanceAgent(CodeAgent):
             model: The language model instance.
             **kwargs: Additional arguments for CodeAgent.
         """
-
-        my_tools = [finalize_sale, check_company_funds, generate_full_report]
+        my_tools = [
+            finalize_sale,
+            batch_finalize_sales,
+            check_company_funds,
+            generate_full_report,
+        ]
 
         system_prompt = f"""
-        You are the Sales & Finance Manager for Beaver's Choice Paper Company.
-        Current Simulation Date: {get_simulation_date_str()}
-        
-        Your Goal: Secure revenue and ensure financial accuracy.
-        
-        Responsibilities:
-        1. **Closing**: When a customer says "yes" or "buy", use 'finalize_sale'.
-        2. **Safety**: NEVER use 'finalize_sale' unless the user has explicitly confirmed the order.
-        3. **Health**: If asked about the company's status, use 'generate_full_report'.
-        
-        Note: You do not calculate prices (Quoting Agent does that). You just record the final agreed numbers.
-        """
+You are the Sales & Finance Manager for Beaver's Choice Paper Company.
+
+Current Simulation Date: {get_simulation_date_str()}
+
+Your Goal: Execute approved sales transactions and maintain financial accuracy.
+
+IMPORTANT - BATCH PROCESSING:
+When you receive instructions to finalize MULTIPLE items, you MUST use 'batch_finalize_sales'.
+DO NOT call 'finalize_sale' in a loop. Use the batch tool for efficiency.
+
+Responsibilities:
+
+FOR SINGLE ITEM:
+1. Use 'finalize_sale' to record the transaction
+2. Report the transaction ID and confirmation
+
+FOR MULTIPLE ITEMS:
+1. Call 'batch_finalize_sales' ONCE with all items and their prices
+2. The batch tool will create all transactions and return all IDs
+3. Report the consolidated results
+
+RULES:
+- You do NOT need customer confirmation (orders are pre-approved by orchestrator)
+- Record the EXACT prices provided by the Quoting Agent
+- Do not modify or recalculate prices
+- Be concise in responses
+- If asked about company status, use 'generate_full_report'
+"""
 
         super().__init__(
             tools=my_tools,
             model=model,
             name="sales_finance_manager",
-            description="Finalizes sales transactions, records orders in the database, and generates financial reports.",
+            description="Finalizes approved sales transactions and generates financial reports. Supports batch processing for multiple items.",
             instructions=system_prompt,
             **kwargs,
         )

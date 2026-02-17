@@ -1,0 +1,55 @@
+graph TD
+    %% Global Entry Point
+    User([Customer Request CSV]) --> Orchestrator
+
+    subgraph "Central Control"
+        Orchestrator[<b>Orchestrator Agent</b><br/>Parses items/dates, delegates tasks,<br/>synthesizes final response]
+    end
+
+    %% Agent 1: Inventory
+    subgraph "Supply Chain Specialist"
+        InventoryAgent[<b>Inventory Manager</b><br/>Batch stock checking &<br/>autonomous procurement]
+        InvTool[[process_inventory_batch]]
+        
+        InventoryAgent <--> InvTool
+        InvTool -.-> get_stock_level
+        InvTool -.-> get_supplier_delivery_date
+        InvTool -.-> create_transaction_stock_orders
+    end
+
+    %% Agent 2: Quoting
+    subgraph "Financial Strategist"
+        QuotingAgent[<b>Quoting Specialist</b><br/>Pricing logic, bulk discounts,<br/>historical benchmarking]
+        QuoteTool[[generate_batch_quote]]
+        HistTool[[get_quote_history_summary]]
+        
+        QuotingAgent <--> QuoteTool
+        QuotingAgent <--> HistTool
+        QuoteTool -.-> db_engine_inventory_table
+        HistTool -.-> search_quote_history
+    end
+
+    %% Agent 3: Sales
+    subgraph "The Closer"
+        SalesAgent[<b>Sales & Finance Agent</b><br/>Order finalization &<br/>financial reporting]
+        SaleTool[[finalize_batch_sale]]
+        ReportTool[[generate_full_report]]
+        
+        SalesAgent <--> SaleTool
+        SalesAgent <--> ReportTool
+        SaleTool -.-> create_transaction_sales
+        ReportTool -.-> generate_financial_report
+        ReportTool -.-> get_cash_balance
+    end
+
+    %% Orchestration Data Flow
+    Orchestrator -- "1. List[Items] + Deadline" --> InventoryAgent
+    InventoryAgent -- "Feasibility & Restock IDs" --> Orchestrator
+    
+    Orchestrator -- "2. List[Items]" --> QuotingAgent
+    QuotingAgent -- "Total Prices & Discounts" --> Orchestrator
+    
+    Orchestrator -- "3. Final Agreed Data" --> SalesAgent
+    SalesAgent -- "Sale IDs & Balance" --> Orchestrator
+
+    Orchestrator -- "Final Batch Summary" --> User

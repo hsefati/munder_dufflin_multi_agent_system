@@ -105,6 +105,7 @@ def run_test_scenarios():
             model=model,
             managed_team=[inventory_manager, quote_manager, sales_manager],
             verbosity_level=SMOLAGENT_VERBOSITY,
+            max_steps=30,
         )
         
         response = orchestrator.run(request_with_date)
@@ -130,10 +131,9 @@ def run_test_scenarios():
 
         time.sleep(1)
         
-        count += 1
-        if count % 5 == 0:
-            print(f"\n--- Progress: {count}/{len(quote_requests_sample)} requests processed ---")   
-            break
+        # if count >= 5:  # Limit to first 5 requests for testing
+        #     break
+        # count += 1
 
     # Final report
     final_date = quote_requests_sample["request_date"].max().strftime("%Y-%m-%d")

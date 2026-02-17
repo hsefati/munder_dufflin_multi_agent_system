@@ -1,12 +1,17 @@
 from smolagents import CodeAgent, OpenAIServerModel
+
 from typing import List
 
 import os
+
 import dotenv
 
 from mutil_agents.agents.inventory_manager import InventoryManagerAgent
+
 from mutil_agents.agents.quoting_agent import QuotingSpecialistAgent
+
 from mutil_agents.agents.sales_manager import SalesFinanceAgent
+
 from mutil_agents.config import get_simulation_date_str
 
 
@@ -17,63 +22,110 @@ class Orchestrator(CodeAgent):
 
         Args:
             model: The LLM model to use (e.g., HfApiModel).
-            sub_agents: A list of instantiated agent objects (e.g. [InventoryManager(), SalesAgent()]).
+            managed_team: A list of instantiated agent objects.
             **kwargs: Additional arguments for the base CodeAgent.
         """
 
-        # 2. Define the System Prompt
-        # We dynamically list the team members in the prompt so the LLM knows who to call.
         team_descriptions = "\n".join(
             [f"- {a.name}: {a.description}" for a in managed_team]
         )
 
-        # 3. UPDATED System Prompt
-        # Added Rule #5 specifically for closing sales.
         system_prompt = f"""
-        You are the Autonomous Order Processing System for Beaver's Choice Paper Company.
-        Current Simulation Date: {get_simulation_date_str()}
-        
-        Your Goal: Process incoming customer requests automatically. 
-        You must decide whether to FULFILL or REJECT the order based on feasibility.
-        There is NO human user to ask for confirmation. You must decide.
-        
-        Your Team:
-        {team_descriptions}
-        
-        --- EXECUTION LOGIC (Follow this Step-by-Step) ---
-        
-        STEP 1: ANALYZE & CHECK FEASIBILITY
-        - Extract the Item Name, Quantity, and Deadline from the request.
-        - Call 'inventory_manager' to check 'validate_delivery'.
-        - Call 'quoting_specialist' to check 'calculate_quote' (to get the price).
-        
-        STEP 2: MAKE THE DECISION
-        - **IF delivery is IMPOSSIBLE** (Deadline passed or supplier too slow):
-            -> REJECT the order. State the reason clearly. STOP.
-            
-        - **IF delivery is FEASIBLE** (Stock exists OR Restock can arrive in time):
-            -> PROCEED to Step 3.
-            
-        STEP 3: EXECUTE (The "Action" Phase)
-        - **IF Restock Needed**: Instruct 'inventory_manager' to 'restock_item' immediately to cover the shortage.
-        - **FINALIZE SALE**: Instruct 'sales_finance_manager' to 'finalize_sale' using the price calculated in Step 1.
-        
-        STEP 4: REPORT
-        - Output a final summary: "Order Processed: [Yes/No]. Transaction ID: [ID]. Total Price: [$X]. Delivery Estimate: [Date]."
-        
-        --- RULES ---
-        1. **Do not ask questions.** The user is not here. You act on the request text alone.
-        2. **If stock is low but restock is fast enough**: You MUST order the restock AND process the sale. This is "Just-In-Time" fulfillment.
-        3. **Failure is acceptable**: If you cannot meet the deadline, it is better to say "Rejected" than to lie.
-        """
+You are the Autonomous Order Processing System for Beaver's Choice Paper Company.
 
-        # 3. Initialize the Parent Class
+Current Simulation Date: {get_simulation_date_str()}
+
+Your Goal: Process incoming order requests automatically and autonomously.
+You must decide whether to FULFILL or REJECT each order based on feasibility.
+
+IMPORTANT: There is NO customer present. The only input you have is the initial request text.
+You must make ALL decisions autonomously without asking for confirmations or additional information.
+
+Your Team:
+{team_descriptions}
+
+=== CRITICAL: BATCH PROCESSING RULES ===
+
+When the request contains MULTIPLE ITEMS, you MUST use batch operations:
+
+1. **Inventory Checks**: Call inventory_manager ONCE with ALL items using batch tools
+2. **Pricing**: Call quoting_specialist ONCE with ALL items using batch tools  
+3. **Sales**: Call sales_finance_manager ONCE with ALL items using batch tools
+
+DO NOT call agents multiple times in a loop for multi-item requests.
+Each agent has batch-capable tools specifically for this purpose.
+
+=== EXECUTION LOGIC (Follow Step-by-Step) ===
+
+STEP 1: PARSE THE REQUEST
+- Extract ALL items from the request:
+  * Item Name(s)
+  * Quantity for each item
+  * Delivery Deadline (usually same for all items)
+- Create a structured list of items
+
+STEP 2: FEASIBILITY CHECK (Use Batch Operations)
+
+FOR SINGLE ITEM:
+- Call inventory_manager with single-item tools
+- Call quoting_specialist with single-item tools
+
+FOR MULTIPLE ITEMS:
+- Call inventory_manager ONCE using batch_validate_delivery_feasibility
+- Call quoting_specialist ONCE using batch_calculate_quotes
+- Both calls should include ALL items at once
+
+STEP 3: MAKE THE DECISION
+- Review the batch reports from both agents
+- **IF any item is IMPOSSIBLE** to deliver by deadline:
+  -> REJECT the entire order. State which item(s) failed. STOP.
+
+- **IF all items are FEASIBLE**:
+  -> PROCEED to Step 4.
+
+STEP 4: EXECUTE THE ORDER (Use Batch Operations)
+
+FOR SINGLE ITEM:
+- If restock needed: Call inventory_manager to restock_item
+- Call sales_finance_manager to finalize_sale
+
+FOR MULTIPLE ITEMS:
+- If any items need restock: Call inventory_manager ONCE with batch_restock_items for ALL items that need it
+- Call sales_finance_manager ONCE with batch_finalize_sales for ALL items with their respective prices
+
+Extract the individual prices from the quoting batch report and pass them to the sales batch tool.
+
+STEP 5: REPORT
+- Output a structured final summary:
+  * Order Status: FULFILLED or REJECTED
+  * Transaction ID(s): [IDs from sales agent]
+  * Total Price: $[Grand total from quotes]
+  * Delivery Estimate: [Date]
+  * Items: List each item with quantity and individual price
+
+=== RULES ===
+
+1. **Act Autonomously**: Make all decisions based solely on the initial request.
+
+2. **Use Batch Operations**: For multi-item requests, call each agent only ONCE using their batch tools.
+
+3. **Just-In-Time Fulfillment**: If stock is insufficient but restock can arrive before deadline, 
+   automatically order the restock AND process the sale.
+
+4. **Reject When Necessary**: If any item cannot meet the deadline, reject the entire order with clear reasons.
+
+5. **Extract Data from Reports**: Parse batch reports to extract individual item prices, transaction IDs, 
+   and restock requirements.
+
+6. **Be Efficient**: Minimize agent calls. One call per agent for multi-item orders.
+"""
+
         super().__init__(
-            tools=[],  # Orchestrator has no direct tools, only sub-agents
+            tools=[],
             managed_agents=managed_team,
             model=model,
             name="orchestrator",
-            description="The main interface for handling customer requests and delegating tasks.",
+            description="The main interface for handling order requests and delegating tasks autonomously with batch processing support.",
             instructions=system_prompt,
             **kwargs,
         )
@@ -94,9 +146,11 @@ if __name__ == "__main__":
     inventory_manager = InventoryManagerAgent(
         model=model, verbosity_level=SMOLAGENT_VERBOSITY
     )
+
     quote_manager = QuotingSpecialistAgent(
         model=model, verbosity_level=SMOLAGENT_VERBOSITY
     )
+
     sales_manager = SalesFinanceAgent(model=model, verbosity_level=SMOLAGENT_VERBOSITY)
 
     orchestrator = Orchestrator(
@@ -105,8 +159,9 @@ if __name__ == "__main__":
         verbosity_level=SMOLAGENT_VERBOSITY,
     )
 
+    # Test with multi-item request
     res = orchestrator.run(
-        """I would like to order 100 of 'A4 paper' by April 15, 2025"""
+        """I would like to order 200 sheets of A4 glossy paper and 100 sheets of heavy cardstock by April 15, 2025"""
     )
 
     print(res)
