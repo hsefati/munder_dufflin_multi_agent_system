@@ -1,6 +1,6 @@
 # Munder Difflin Multi-Agent System Project
 
-Welcome to the starter code repository for the **Munder Difflin Paper Company Multi-Agent System Project**! This repository contains the starter code and tools you will need to design, build, and test a multi-agent system that supports core business operations at a fictional paper manufacturing company.
+This repository contains a fully implemented **Munder Difflin Paper Company Multi-Agent System** that automates core business operations at a fictional paper manufacturing company using modern AI agents and Python frameworks.
 
 ## Project Context
 
@@ -16,20 +16,32 @@ This project challenges your ability to orchestrate agents using modern Python f
 
 ---
 
-## What’s Included
+## What's Included
 
-From the `project.zip` starter archive, you will find:
+This project includes:
 
-- `project_starter.py`: The main Python script you will modify to implement your agent system
-- `quotes.csv`: Historical quote data used for reference by quoting agents
-- `quote_requests.csv`: Incoming customer requests used to build quoting logic
-- `quote_requests_sample.csv`: A set of simulated test cases to evaluate your system
+- **Multi-Agent System:** A coordinated system of 5 specialized agents (`main.py`)
+  - `InventoryManagerAgent`: Manages inventory levels and restocking decisions
+  - `QuoteAgent`: Generates quotes for incoming sales inquiries
+  - `CustomerAgent`: Handles customer interactions
+  - `FulfillmentAgent`: Processes order fulfillment and logistics
+  - `OrchestratorAgent`: Coordinates all agents and orchestrates workflows
+
+- **Data Files:**
+  - `quotes.csv`: Historical quote data for reference
+  - `quote_requests.csv`: Complete customer request dataset
+  - `quote_requests_sample.csv`: Simulated test cases
+  - `paper_supplies.json`: Product inventory database
+
+- **Database Tools:** SQLite integration for persistent state management
+- **Utilities:** Financial reporting, transaction logging, and analysis tools
+- **Test Results:** `test_results.csv` with complete interaction logs and outcomes
 
 ---
 
 ## Workspace Instructions
 
-All the files have been provided in the VS Code workspace on the Udacity platform. Please install the agent orchestration framework of your choice.
+All files are provided in this repository. The project uses the `smolagents` framework for agent orchestration with OpenAI-compatible APIs.
 
 ## Local Setup Instructions
 
@@ -80,38 +92,112 @@ LOGGING_LEVEL=INFO
 
 ## How to Run the Project
 
-Start by defining your agents in the `"YOUR MULTI AGENT STARTS HERE"` section inside `template.py`. Once your agent team is ready:
+To execute the multi-agent system and process customer requests:
 
-1. Run the `run_test_scenarios()` function at the bottom of the script.
-2. This will simulate a series of customer requests.
-3. Your system should respond by coordinating inventory checks, generating quotes, and processing orders.
+1. Ensure all dependencies are installed (see "Local Setup Instructions")
+2. Configure your `.env` file with the required API key
+3. Run the main script:
+   ```bash
+   uv run main.py
+   # or
+   python main.py
+   ```
 
-Output will include:
+The system will:
+- Initialize the SQLite database (if not already present)
+- Load sample customer requests from `quote_requests_sample.csv`
+- Orchestrate agents to process each request
+- Generate quotes, check inventory, and process fulfillment
+- Output transaction logs and financial reports
+- Save detailed results to `test_results.csv`
 
-- Agent responses
-- Cash and inventory updates
-- Final financial report
-- A `test_results.csv` file with all interaction logs
+### Debugging Single Requests
 
----
+To debug a specific request, modify the `request_num` variable in `main.py` (around line 118):
 
-## Tips for Success
+```python
+# MANUAL DEBUG: Set request_num here to debug a specific request
+request_num = 0  # Change this to any index you want to debug
+```
 
-- Start by sketching a **flow diagram** to visualize agent responsibilities and interactions.
-- Test individual agent tools before full orchestration.
-- Always include **dates** in customer requests when passing data between agents.
-- Ensure every quote includes **bulk discounts** and uses past data when available.
-- Use the **exact item names** from the database to avoid transaction failures.
-
----
-
-## Submission Checklist
-
-Make sure to submit the following files:
-
-1. Your completed `template.py` or `project_starter.py` with all agent logic
-2. A **workflow diagram** describing your agent architecture and data flow
-3. A `README.txt` or `design_notes.txt` explaining how your system works
-4. Outputs from your test run (like `test_results.csv`)
+Results will be appended to `test_results.csv` for tracking multiple debug runs.
 
 ---
+
+## Project Architecture
+
+The multi-agent system consists of five specialized agents working in coordination:
+
+- **InventoryManagerAgent** (`mutil_agents/agents/inventory_management_v2.py`): Monitors stock levels and makes restocking decisions
+- **QuoteAgent** (`mutil_agents/agents/quote_agent_v2.py`): Generates competitive quotes based on historical data
+- **CustomerAgent** (`mutil_agents/agents/customer_agent.py`): Manages customer interactions and context
+- **FulfillmentAgent** (`mutil_agents/agents/fulfillment_agent_v2.py`): Handles order processing and logistics
+- **OrchestratorAgent** (`mutil_agents/agents/orchestrator_agent.py`): Coordinates workflows between agents
+
+Supporting tools are located in `mutil_agents/tools/` with utilities for database management, inventory operations, quoting, fulfillment, and financial reporting.
+
+### Workflow Diagram
+
+```mermaid
+graph TD
+    %% Global Entry Point
+    User([Customer Request CSV]) --> Orchestrator
+
+    subgraph "Central Control"
+        Orchestrator[<b>Orchestrator Agent</b><br/>Parses items/dates, delegates tasks,<br/>synthesizes final response]
+    end
+
+    %% Agent 1: Inventory
+    subgraph "Supply Chain Specialist"
+        InventoryAgent[<b>Inventory Manager</b><br/>Batch stock checking &<br/>autonomous procurement]
+        InvTool[[process_inventory_batch]]
+        
+        InventoryAgent <--> InvTool
+        InvTool -.-> get_stock_level
+        InvTool -.-> get_supplier_delivery_date
+        InvTool -.-> create_transaction_stock_orders
+    end
+
+    %% Agent 2: Quoting
+    subgraph "Financial Strategist"
+        QuotingAgent[<b>Quoting Specialist</b><br/>Pricing logic, bulk discounts,<br/>historical benchmarking]
+        QuoteTool[[generate_batch_quote]]
+        HistTool[[get_quote_history_summary]]
+        
+        QuotingAgent <--> QuoteTool
+        QuotingAgent <--> HistTool
+        QuoteTool -.-> db_engine_inventory_table
+        HistTool -.-> search_quote_history
+    end
+
+    %% Agent 3: Sales
+    subgraph "The Closer"
+        SalesAgent[<b>Sales & Finance Agent</b><br/>Order finalization &<br/>financial reporting]
+        SaleTool[[finalize_batch_sale]]
+        ReportTool[[generate_full_report]]
+        
+        SalesAgent <--> SaleTool
+        SalesAgent <--> ReportTool
+        SaleTool -.-> create_transaction_sales
+        ReportTool -.-> generate_financial_report
+        ReportTool -.-> get_cash_balance
+    end
+
+    %% Orchestration Data Flow
+    Orchestrator -- "1. List[Items] + Deadline" --> InventoryAgent
+    InventoryAgent -- "Feasibility & Restock IDs" --> Orchestrator
+    
+    Orchestrator -- "2. List[Items]" --> QuotingAgent
+    QuotingAgent -- "Total Prices & Discounts" --> Orchestrator
+    
+    Orchestrator -- "3. Final Agreed Data" --> SalesAgent
+    SalesAgent -- "Sale IDs & Balance" --> Orchestrator
+
+    Orchestrator -- "Final Batch Summary" --> User
+```
+
+## Output Files
+
+- `munder_difflin.db`: SQLite database with inventory, transactions, and financial data
+- `munder_difflin.log`: Detailed execution logs for debugging and analysis
+- `test_results.csv`: Results from test runs including request details, fulfillment status, and financial impact
