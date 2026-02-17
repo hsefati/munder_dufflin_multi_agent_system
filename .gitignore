@@ -173,3 +173,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 *.db
+mutil_agents/.DS_Store
+.gitignore
+mutil_agents/agents/.DS_Store
