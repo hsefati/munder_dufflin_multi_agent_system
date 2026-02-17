@@ -31,29 +31,52 @@ From the `project.zip` starter archive, you will find:
 
 All the files have been provided in the VS Code workspace on the Udacity platform. Please install the agent orchestration framework of your choice.
 
-## Local setup instructions
+## Local Setup Instructions
 
-1. Install dependencies
+### 1. Install Python and UV Package Manager
 
-Make sure you have Python 3.8+ installed.
+Make sure you have Python 3.8+ installed. We recommend using **UV** as the package manager for faster and more reliable dependency management.
 
-You can install all required packages using the provided requirements.txt file:
+**Install UV:**
+- **macOS/Linux:** `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **Windows:** `powershell -c "irm https://astral.sh/uv/install.ps1 | iex"`
+- **Via pip:** `pip install uv`
 
-`pip install -r requirements.txt`
+### 2. Install Dependencies
+
+Using UV (recommended):
+```bash
+uv sync
+```
+
+Or using pip:
+```bash
+pip install -r requirements.txt
+```
 
 If you're using smolagents, install it separately:
-
-`pip install smolagents`
+```bash
+uv pip install smolagents
+```
 
 For other options like pydantic-ai or npcsh[lite], refer to their documentation.
 
-2. Create .env File
+### 3. Create and Configure .env File
 
-Add your OpenAI-compatible API key:
+Create a `.env` file in the project root directory with your environment variables:
 
-`UDACITY_OPENAI_API_KEY=your_openai_key_here`
+```env
+UDACITY_OPENAI_API_KEY=your_openai_key_here
+SMOLAGENT_VERBOSITY=0
+LOGGING_LEVEL=INFO
+```
 
-This project uses a custom OpenAI-compatible proxy hosted at https://openai.vocareum.com/v1.
+**Environment Variables:**
+- `UDACITY_OPENAI_API_KEY`: Your OpenAI-compatible API key (required). This project uses a custom OpenAI-compatible proxy hosted at https://openai.vocareum.com/v1
+- `SMOLAGENT_VERBOSITY`: Controls agent verbosity level (0-2, default: 0)
+- `LOGGING_LEVEL`: Sets logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL, default: INFO)
+
+**Important:** Never commit the `.env` file to version control. Add it to `.gitignore`.
 
 ## How to Run the Project
 
